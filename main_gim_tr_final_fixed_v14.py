@@ -1,4 +1,5 @@
-
+import os
+import json
 import logging
 from telegram import Update
 from telegram.ext import (
@@ -13,10 +14,10 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 
-# Настройки
-TOKEN = "7712104265:AAEatKHUM-MHrp2YRzFFuMf9d282ormf0Cs"
-SPREADSHEET_NAME = "hesabla"
-CREDS_FILE = "gspread_key.json"
+# Настройки — теперь через переменные окружения
+TOKEN = os.getenv("TOKEN")
+SPREADSHEET_NAME = os.getenv("SHEET_NAME")
+CREDS_FILE = os.getenv("CREDS_FILE")
 
 # Константы состояний
 (
