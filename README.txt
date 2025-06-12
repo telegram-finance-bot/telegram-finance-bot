@@ -18,7 +18,7 @@
    ```
    на ваш токен, например:
    ```
-   BOT_TOKEN=7712104265:AAF1HBJ8Mk1ypADd-r38jEZttqgXo-HrmOw
+   BOT_TOKEN=7712104265:AAEatKHUM-MHrp2YRzFFuMf9d282ormf0Cs
    ```
 
 3. Установите зависимости:
