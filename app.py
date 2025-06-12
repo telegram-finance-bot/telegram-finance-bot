@@ -143,11 +143,7 @@ def main():
 
     # Включение Webhook
     if __name__ == "__main__":
-        application.run_polling()
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000)),
-        webhook_url=WEBHOOK_URL
-    )
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
