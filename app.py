@@ -1,114 +1,152 @@
 import os
 import json
 import logging
-import gspread
-from datetime import datetime
-from google.oauth2.service_account import Credentials
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
     ConversationHandler, ContextTypes, filters
 )
+import gspread
+from google.oauth2.service_account import Credentials
+from datetime import datetime
 
-# Получение переменных окружения
-TOKEN = os.getenv("TOKEN")
+# Настройки
+TOKEN = os.getenv("BOT_TOKEN")
 SPREADSHEET_NAME = os.getenv("SHEET_NAME", "hesabla")
 CREDS_FILE = os.getenv("CREDS_FILE", "gspread_key.json")
+WEBHOOK_URL = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/webhook"
 
-# Состояния
-CHOOSE_MODE, CHOOSE_TYPE = range(2)
-ENTER_DATE, ENTER_NAME, ENTER_WORK_TYPE, ENTER_BT, ENTER_CARD, ENTER_HELPER_NAME, ENTER_HELPER_EARNED, ENTER_OT, ENTER_DINCEL, ENTER_TIME = range(10)
+# Константы состояний
+(
+    CHOOSE_MODE, CHOOSE_TYPE, ENTER_DATE, ENTER_NAME, ENTER_WORK_TYPE,
+    ENTER_BT, ENTER_CARD, ENTER_HELPER_NAME, ENTER_EARNED,
+    ENTER_OT, ENTER_DINCEL, ENTER_TIME
+) = range(12)
 
+# Данные пользователя
 user_data_dict = {}
 
+# Google Sheets
+def init_sheet(sheet_name):
+    scope = ['https://spreadsheets.google.com/feeds',
+             'https://www.googleapis.com/auth/drive']
+    creds = Credentials.from_service_account_file(CREDS_FILE, scopes=scope)
+    client = gspread.authorize(creds)
+    spreadsheet = client.open(SPREADSHEET_NAME)
+    return spreadsheet.worksheet(sheet_name)
+
+def save_data_to_sheet(sheet, data):
+    sheet.append_row(data)
+
+# Команды
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Привет! Напиши GIM или TR, чтобы выбрать режим.")
     return CHOOSE_MODE
 
 async def choose_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_input = update.message.text.strip().upper()
-    chat_id = update.message.chat_id
+    mode = update.message.text.upper()
+    user_data_dict[update.effective_chat.id] = {'mode': mode}
+    await update.message.reply_text("Введите дату:")
+    return ENTER_DATE
 
-    if user_input == "GIM":
-        user_data_dict[chat_id] = {"mode": "GIM"}
-        await update.message.reply_text("Введите дату:")
-        return ENTER_DATE
-    elif user_input == "TR":
-        await update.message.reply_text("Пожалуйста, напиши WORK или OUT.")
-        return CHOOSE_TYPE
-    else:
-        await update.message.reply_text("Пожалуйста, введите GIM или TR.")
-        return CHOOSE_MODE
+async def enter_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data_dict[update.effective_chat.id]['date'] = update.message.text
+    await update.message.reply_text("Введите имя:")
+    return ENTER_NAME
 
-async def choose_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.message.chat_id
-    text = update.message.text.strip().upper()
-    if text in ["WORK", "OUT"]:
-        user_data_dict[chat_id] = {"mode": "TR", "type": text}
-        await update.message.reply_text("Введите дату:")
-        return ENTER_DATE
-    else:
-        await update.message.reply_text("Пожалуйста, напиши WORK или OUT.")
-        return CHOOSE_TYPE
+async def enter_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data_dict[update.effective_chat.id]['name'] = update.message.text
+    await update.message.reply_text("Введите work type:")
+    return ENTER_WORK_TYPE
 
-async def collect_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.message.chat_id
-    text = update.message.text.strip()
-    user_data = user_data_dict.get(chat_id, {})
+async def enter_work_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data_dict[update.effective_chat.id]['work_type'] = update.message.text
+    await update.message.reply_text("Введите BT:")
+    return ENTER_BT
 
-    fields_gim = ["date", "name", "work_type", "BT", "T", "AT", "card", "helper_name", "what_they_earned"]
-    fields_work = ["date", "name", "work_type", "BT", "card", "helper_name", "what_they_earned", "ot", "dincel", "time"]
-    fields_out = ["date", "name", "work_type", "BT", "card", "helper_name", "what_they_earned", "ot", "dincel"]
+async def enter_bt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data_dict[update.effective_chat.id]['bt'] = update.message.text
+    await update.message.reply_text("Введите card:")
+    return ENTER_CARD
 
-    current_field = user_data.get("current_field")
-    if not current_field:
-        if user_data.get("mode") == "GIM":
-            user_data["fields"] = fields_gim
-        elif user_data.get("type") == "WORK":
-            user_data["fields"] = fields_work
-        else:
-            user_data["fields"] = fields_out
-        user_data["current_field_index"] = 0
-        current_field = user_data["fields"][0]
-        user_data["current_field"] = current_field
+async def enter_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data_dict[update.effective_chat.id]['card'] = update.message.text
+    await update.message.reply_text("Введите helper name:")
+    return ENTER_HELPER_NAME
 
-    user_data[current_field] = text
-    user_data["current_field_index"] += 1
+async def enter_helper_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data_dict[update.effective_chat.id]['helper_name'] = update.message.text
+    await update.message.reply_text("Введите what they earned:")
+    return ENTER_EARNED
 
-    if user_data["current_field_index"] < len(user_data["fields"]):
-        next_field = user_data["fields"][user_data["current_field_index"]]
-        user_data["current_field"] = next_field
-        await update.message.reply_text(f"Введите {next_field.replace('_', ' ')}:")
-        return ENTER_DATE
-    else:
-        write_to_sheet(user_data)
-        await update.message.reply_text("Данные успешно записаны.")
-        user_data_dict.pop(chat_id, None)
-        return ConversationHandler.END
+async def enter_earned(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data_dict[update.effective_chat.id]['earned'] = update.message.text
+    await update.message.reply_text("Введите ot:")
+    return ENTER_OT
 
-def write_to_sheet(user_data):
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/spreadsheets",
-             "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"]
-    creds = Credentials.from_service_account_file(CREDS_FILE, scopes=scope)
-    client = gspread.authorize(creds)
-    sheet = client.open(SPREADSHEET_NAME).worksheet("TR")
+async def enter_ot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data_dict[update.effective_chat.id]['ot'] = update.message.text
+    await update.message.reply_text("Введите dincel:")
+    return ENTER_DINCEL
 
-    values = [user_data.get(field, "") for field in user_data.get("fields", [])]
-    sheet.append_row(values, value_input_option="USER_ENTERED")
+async def enter_dincel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data_dict[update.effective_chat.id]['dincel'] = update.message.text
+    await update.message.reply_text("Введите время:")
+    return ENTER_TIME
 
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
+async def enter_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data_dict[update.effective_chat.id]['time'] = update.message.text
+
+    user_data = user_data_dict[update.effective_chat.id]
+    sheet = init_sheet(user_data['mode'])
+    row = [
+        user_data.get('date', ''),
+        user_data.get('name', ''),
+        user_data.get('work_type', ''),
+        user_data.get('bt', ''),
+        '',
+        '',
+        user_data.get('card', ''),
+        user_data.get('helper_name', ''),
+        user_data.get('earned', ''),
+        '',
+        '',
+        '',
+        user_data.get('time', '')
+    ]
+    save_data_to_sheet(sheet, row)
+    await update.message.reply_text("Данные успешно записаны.")
+    return ConversationHandler.END
+
+def main():
     application = ApplicationBuilder().token(TOKEN).build()
 
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
+        entry_points=[CommandHandler('start', start)],
         states={
             CHOOSE_MODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_mode)],
-            CHOOSE_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_type)],
-            ENTER_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, collect_input)],
+            ENTER_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_date)],
+            ENTER_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_name)],
+            ENTER_WORK_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_work_type)],
+            ENTER_BT: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_bt)],
+            ENTER_CARD: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_card)],
+            ENTER_HELPER_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_helper_name)],
+            ENTER_EARNED: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_earned)],
+            ENTER_OT: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_ot)],
+            ENTER_DINCEL: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_dincel)],
+            ENTER_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_time)],
         },
         fallbacks=[]
     )
 
     application.add_handler(conv_handler)
-    application.run_polling()
+
+    # Включение Webhook
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000)),
+        webhook_url=WEBHOOK_URL
+    )
+
+if __name__ == '__main__':
+    main()
