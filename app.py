@@ -144,6 +144,3 @@ def main():
     # Включение Webhook
     if __name__ == "__main__":
     application.run_polling()
-
-if __name__ == '__main__':
-    main()
