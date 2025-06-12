@@ -11,7 +11,7 @@ from telegram.ext import (
 )
 
 # Настройки
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("7712104265:AAEatKHUM-MHrp2YRzFFuMf9d282ormf0Cs")
 SPREADSHEET_NAME = os.getenv("SPREADSHEET_NAME", "hesabla")
 CREDS_FILE = os.getenv("CREDS_FILE", "gspread_key.json")
 
