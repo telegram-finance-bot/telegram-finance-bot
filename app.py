@@ -143,4 +143,8 @@ def main():
 
     # Включение Webhook
     if __name__ == "__main__":
-        application.run_polling()
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000)),
+        webhook_url="https://<your-render-url>.onrender.com"
+    )
