@@ -1,5 +1,3 @@
 python-telegram-bot==20.3
-python-dotenv
-nest_asyncio
-gspread
-python-telegram-bot[webhooks]
+gspread==5.7.2
+oauth2client==4.1.3
