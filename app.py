@@ -142,7 +142,8 @@ def main():
     application.add_handler(conv_handler)
 
     # Включение Webhook
-    application.run_webhook()
+    if __name__ == "__main__":
+        application.run_polling()
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
         webhook_url=WEBHOOK_URL
