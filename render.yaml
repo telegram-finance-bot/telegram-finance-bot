@@ -3,14 +3,14 @@ services:
     name: telegram-finance-bot
     env: python
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "python3 main_gim_tr_final_fixed_v14.py"
+    startCommand: "uvicorn app:app --host 0.0.0.0 --port 10000"
     envVars:
-      - key: TOKEN
-        fromEnvVar: TOKEN
+      - key: BOT_TOKEN
+        fromEnvVar: BOT_TOKEN
       - key: SHEET_NAME
         fromEnvVar: SHEET_NAME
       - key: CREDS_FILE
-        fromEnvVar: CREDS_FILE
+        value: /etc/secrets/gspread_key.json
     secretFiles:
       - name: gspread_key.json
         mountPath: /etc/secrets/gspread_key.json
