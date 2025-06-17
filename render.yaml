@@ -6,9 +6,9 @@ services:
     startCommand: "python3 app.py"
     envVars:
       - key: BOT_TOKEN
-        sync: false
+        sync: 7712104265:AAEatKHUM-MHrp2YRzFFuMf9d282ormf0Cs
       - key: SHEET_NAME
-        sync: false
+        sync: hesabla
       - key: CREDS_FILE
         value: /etc/secrets/gspread_key.json
     secretFiles:
