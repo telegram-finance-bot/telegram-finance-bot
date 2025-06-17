@@ -146,7 +146,11 @@ async def main():
     app.add_handler(conv_handler)
 
     await app.bot.set_webhook("https://telegram-finance-bot-0ify.onrender.com")
-    await app.run_webhook(listen="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    await app.run_webhook(
+    listen="0.0.0.0",
+    port=int(os.environ.get("PORT", 10000)),
+    webhook_url="https://telegram-finance-bot-0ify.onrender.com"
+)
 
 if __name__ == "__main__":
     import asyncio
