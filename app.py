@@ -9,6 +9,18 @@ from telegram.ext import (
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import asyncio
+from flask import Flask
+from threading import Thread
+
+# === Flask для корневого пути ===
+flask_app = Flask(__name__)
+
+@flask_app.route("/")
+def index():
+    return "Bot is running!", 200
+
+def run_flask():
+    flask_app.run(host="0.0.0.0", port=8000)
 
 # === Переменные окружения ===
 TOKEN = os.environ.get("BOT_TOKEN")
@@ -121,8 +133,10 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Операция отменена.")
     return ConversationHandler.END
 
-# === Запуск сервера ===
+# === Основная функция запуска ===
 async def main():
+    Thread(target=run_flask).start()
+
     app = ApplicationBuilder().token(TOKEN).build()
 
     conv_handler = ConversationHandler(
@@ -147,14 +161,12 @@ async def main():
 
     await app.bot.set_webhook("https://telegram-finance-bot-0ify.onrender.com")
     await app.run_webhook(
-    listen="0.0.0.0",
-    port=int(os.environ.get("PORT", 10000)),
-    webhook_url="https://telegram-finance-bot-0ify.onrender.com"
-)
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000)),
+        webhook_url="https://telegram-finance-bot-0ify.onrender.com"
+    )
 
 if __name__ == "__main__":
-    import asyncio
-
     try:
         asyncio.run(main())
     except RuntimeError as e:
