@@ -1,5 +1,4 @@
 python-telegram-bot[webhooks]==20.3
-Flask
-gspread
-google-auth
+gspread==5.7.2
+google-auth==2.28.1
 nest_asyncio
