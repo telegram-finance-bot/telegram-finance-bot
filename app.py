@@ -42,7 +42,7 @@ client = gspread.authorize(credentials)
 try:
     sheet = client.open(SHEET_NAME)
 except SpreadsheetNotFound:
-    logging.error("Google Sheet не найден. Проверь имя таблицы и доступ.")
+    logging.error("❌ Google Sheet не найден. Проверь имя таблицы и доступ.")
     exit(1)
 
 # === Состояния ===
@@ -50,7 +50,7 @@ CHOOSE_MODE, ENTER_DATE, ENTER_NAME, ENTER_TYPE, ENTER_BT, ENTER_CARD, ENTER_HEL
 
 # === Хендлеры ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logging.info("▶️ Команда /start получена от Telegram")
+    print(f"📩 Получена команда /start от @{update.effective_user.username}")
     await update.message.reply_text("Выберите режим: GIM или TR.")
     return CHOOSE_MODE
 
@@ -141,8 +141,9 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Операция отменена.")
     return ConversationHandler.END
 
-# === Основная функция запуска ===
+# === Основная функция ===
 async def main():
+    print("🚀 main() запущен...")
     app = ApplicationBuilder().token(TOKEN).build()
 
     conv_handler = ConversationHandler(
@@ -165,7 +166,11 @@ async def main():
 
     app.add_handler(conv_handler)
 
+    # 💡 DEBUG print
+    print("📡 Устанавливаю webhook...")
     await app.bot.set_webhook("https://telegram-finance-bot-0ify.onrender.com")
+
+    print("✅ Webhook установлен. Готов к приему сообщений!")
     await app.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
