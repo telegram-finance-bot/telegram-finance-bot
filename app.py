@@ -48,7 +48,10 @@ except SpreadsheetNotFound:
 CHOOSE_MODE, ENTER_DATE, ENTER_NAME, ENTER_TYPE, ENTER_BT, ENTER_CARD, ENTER_HELPER, ENTER_EARNED, ENTER_OT, ENTER_DINCEL, ENTER_TIME = range(11)
 
 # === Хендлеры ===
+aimport logging  # убедись, что это есть вверху
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logging.info("▶️ Получена команда /start")
     await update.message.reply_text("Выберите режим: GIM или TR.")
     return CHOOSE_MODE
 
