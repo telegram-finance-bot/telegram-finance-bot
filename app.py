@@ -146,6 +146,18 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Операция отменена.")
     return ConversationHandler.END
 
+@flask_app.route('/')
+def home():
+    print("✅ Flask пинг прошёл!")
+    return "Bot is running!", 200
+    
+import logging
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logging.info("▶️ Команда /start получена от Telegram")
+    await update.message.reply_text("Выберите режим: GIM или TR.")
+    return CHOOSE_MODE
+    
 # === Запуск Telegram + Flask ===
 async def main():
     app = ApplicationBuilder().token(TOKEN).build()
