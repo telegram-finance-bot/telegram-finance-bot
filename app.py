@@ -123,6 +123,8 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 # === Главная асинхронная функция ===
+import asyncio
+
 async def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
@@ -146,16 +148,12 @@ async def main():
 
     app.add_handler(conv_handler)
 
-    # Установка Webhook
-    await app.bot.set_webhook("https://telegram-finance-bot-0ify.onrender.com")
-
-    # Запуск Webhook сервера
-await app.run_webhook(
-    listen="0.0.0.0",
-    port=int(os.environ.get("PORT", 10000)),
-    webhook_url="https://telegram-finance-bot-0ify.onrender.com",
-    webhook_path="/"
-)
+    # 🚀 Запуск Webhook сервера
+    await app.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000)),
+        webhook_url="https://telegram-finance-bot-0ify.onrender.com",
+        webhook_path="/"
     )
 
 if __name__ == "__main__":
