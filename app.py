@@ -1,213 +1,173 @@
 import os
 import gspread
-from datetime import datetime
-from oauth2client.service_account import ServiceAccountCredentials
 from telegram import Update
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler, filters,
-    ContextTypes, ConversationHandler
+    ApplicationBuilder, CommandHandler, MessageHandler,
+    ConversationHandler, ContextTypes, filters
 )
+from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime
 
-# === ENVIRONMENT VARIABLES ===
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-GOOGLE_KEY_FILE = "gspread_key.json"
-SPREADSHEET_NAME = "ESOPLAN"
+# === Переменные окружения ===
+TOKEN = os.environ.get("BOT_TOKEN")
+CREDS_FILE = os.environ.get("CREDS_FILE")
+SPREADSHEET_NAME = os.environ.get("SHEET_NAME")
 
-# === STATES ===
-MODE, SUBMODE, GIM_DATE, GIM_NAME, GIM_TYPE, GIM_IN, GIM_HELPER, GIM_EARNED, TR_DATE, TR_NAME, TR_TYPE, TR_BT, TR_CARD, TR_HELPER, TR_EARNED, TR_EQUIP, TR_MAINT, TR_GAS, TR_FINE, TR_BONUS, TR_TIME = range(21)
-
-# === GOOGLE SHEETS SETUP ===
+# === Google Sheets Setup ===
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_KEY_FILE, scope)
-client = gspread.authorize(creds)
+credentials = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, scope)
+client = gspread.authorize(credentials)
 sheet = client.open(SPREADSHEET_NAME)
-gim_ws = sheet.worksheet("GIM")
-tr_ws = sheet.worksheet("TR")
 
-user_data = {}
+# === Состояния ===
+CHOOSE_MODE, ENTER_DATE, ENTER_NAME, ENTER_WORK_TYPE, ENTER_BT, ENTER_CARD, ENTER_HELPER_NAME, ENTER_EARNED, ENTER_OT, ENTER_DINCEL, ENTER_TIME = range(11)
 
-# === START ===
+# === Обработчики ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Выберите режим: GIM или TR")
-    return MODE
+    await update.message.reply_text("Выберите режим: GIM или TR.")
+    return CHOOSE_MODE
 
-# === MODE HANDLER ===
-async def mode_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.upper()
-    if text == "GIM":
-        user_data[update.effective_chat.id] = {"mode": "GIM"}
-        await update.message.reply_text("Введите дату:")
-        return GIM_DATE
-    elif text == "TR":
-        user_data[update.effective_chat.id] = {"mode": "TR"}
-        await update.message.reply_text("Введите подрежим: WORK или OUT")
-        return SUBMODE
+async def choose_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    mode = update.message.text.strip().upper()
+    context.user_data["mode"] = mode
+    if mode == "GIM":
+        await update.message.reply_text("Введите дату (например: 12.06)")
+        return ENTER_DATE
+    elif mode == "TR":
+        await update.message.reply_text("Введите тип TR (WORK или OUT)")
+        return ENTER_WORK_TYPE
     else:
-        await update.message.reply_text("Пожалуйста, введите GIM или TR")
-        return MODE
+        await update.message.reply_text("Неверный режим. Напишите GIM или TR.")
+        return CHOOSE_MODE
 
-# === GIM FLOW ===
-async def gim_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["date"] = update.message.text
-    await update.message.reply_text("Введите имя:")
-    return GIM_NAME
+async def enter_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["date"] = update.message.text
+    await update.message.reply_text("Введите имя")
+    return ENTER_NAME
 
-async def gim_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["name"] = update.message.text
-    await update.message.reply_text("Введите тип работы:")
-    return GIM_TYPE
+async def enter_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["name"] = update.message.text
+    await update.message.reply_text("Введите тип работы")
+    return ENTER_WORK_TYPE
 
-async def gim_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["type"] = update.message.text
-    await update.message.reply_text("Введите сумму IN:")
-    return GIM_IN
+async def enter_work_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["work_type"] = update.message.text
+    await update.message.reply_text("Введите BT")
+    return ENTER_BT
 
-async def gim_in(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["in"] = update.message.text
-    await update.message.reply_text("Введите помощника:")
-    return GIM_HELPER
+async def enter_bt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["bt"] = update.message.text
+    await update.message.reply_text("Введите карту")
+    return ENTER_CARD
 
-async def gim_helper(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["helper"] = update.message.text
-    await update.message.reply_text("Введите заработанное:")
-    return GIM_EARNED
+async def enter_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["card"] = update.message.text
+    await update.message.reply_text("Введите имя помощника")
+    return ENTER_HELPER_NAME
 
-async def gim_earned(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["earned"] = update.message.text
-    data = user_data[update.effective_chat.id]
-    gim_ws.append_row([data["date"], data["name"], data["type"], data["in"], "", "", data["helper"], data["earned"]])
-    await update.message.reply_text("✅ Данные GIM сохранены.")
+async def enter_helper_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["helper_name"] = update.message.text
+    await update.message.reply_text("Введите сумму заработка")
+    return ENTER_EARNED
+
+async def enter_earned(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["earned"] = update.message.text
+    await update.message.reply_text("Введите OT")
+    return ENTER_OT
+
+async def enter_ot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["ot"] = update.message.text
+    await update.message.reply_text("Введите DINCEL")
+    return ENTER_DINCEL
+
+async def enter_dincel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["dincel"] = update.message.text
+    await update.message.reply_text("Введите время")
+    return ENTER_TIME
+
+async def enter_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["time"] = update.message.text
+
+    user_data = context.user_data
+    now = datetime.now().strftime("%-d-%b")
+
+    if user_data["mode"] == "GIM":
+        row = [
+            now,
+            user_data["name"],
+            user_data["work_type"],
+            user_data["bt"],
+            "", "",  # пропуск TR и AT
+            user_data["card"],
+            "", "", "",  # пропуск equipment, maintenance, gas
+            user_data["helper_name"],
+            user_data["earned"],
+            "", "", "", "",  # пропуск Gross → bonus
+            user_data["time"],
+        ]
+        sheet.worksheet("GIM").append_row(row, value_input_option="USER_ENTERED")
+
+    elif user_data["mode"] == "TR":
+        if user_data["work_type"].upper() == "WORK":
+            row = [
+                now,
+                user_data["name"],
+                user_data["work_type"],
+                user_data["bt"],
+                "", "",  # пропуск TR и AT
+                user_data["card"],
+                "", "", "",  # пропуск equipment, maintenance, gas
+                user_data["helper_name"],
+                user_data["earned"],
+                "", "", "", "",  # пропуск Gross → bonus
+                user_data["time"],
+            ]
+            sheet.worksheet("TR").append_row(row, value_input_option="USER_ENTERED")
+
+        elif user_data["work_type"].upper() == "OUT":
+            row = [
+                "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",  # пропуск
+                user_data["earned"],
+                user_data["time"]
+            ]
+            sheet.worksheet("TR").append_row(row, value_input_option="USER_ENTERED")
+
+    await update.message.reply_text("Данные сохранены.")
     return ConversationHandler.END
 
-# === TR FLOW ===
-async def submode_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    submode = update.message.text.upper()
-    user_data[update.effective_chat.id]["submode"] = submode
-    await update.message.reply_text("Введите дату:")
-    return TR_DATE
-
-async def tr_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["date"] = update.message.text
-    await update.message.reply_text("Введите имя:")
-    return TR_NAME
-
-async def tr_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["name"] = update.message.text
-    await update.message.reply_text("Введите тип работы:")
-    return TR_TYPE
-
-async def tr_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["type"] = update.message.text
-    await update.message.reply_text("Введите BT:")
-    return TR_BT
-
-async def tr_bt(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["bt"] = update.message.text
-    await update.message.reply_text("Введите карту:")
-    return TR_CARD
-
-async def tr_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["card"] = update.message.text
-    await update.message.reply_text("Введите помощника:")
-    return TR_HELPER
-
-async def tr_helper(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["helper"] = update.message.text
-    await update.message.reply_text("Введите заработанное:")
-    return TR_EARNED
-
-async def tr_earned(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["earned"] = update.message.text
-    if user_data[update.effective_chat.id]["submode"] == "OUT":
-        tr_ws.append_row([
-            user_data[update.effective_chat.id]["date"],
-            user_data[update.effective_chat.id]["name"],
-            user_data[update.effective_chat.id]["type"],
-            "", "", user_data[update.effective_chat.id]["card"],
-            user_data[update.effective_chat.id]["helper"],
-            user_data[update.effective_chat.id]["earned"]
-        ])
-        await update.message.reply_text("✅ Данные TR/OUT сохранены.")
-        return ConversationHandler.END
-    else:
-        await update.message.reply_text("Введите время:")
-        return TR_TIME
-
-async def tr_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["time"] = update.message.text
-    await update.message.reply_text("Введите оборудование:")
-    return TR_EQUIP
-
-async def tr_equip(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["equip"] = update.message.text
-    await update.message.reply_text("Введите обслуживание:")
-    return TR_MAINT
-
-async def tr_maint(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["maint"] = update.message.text
-    await update.message.reply_text("Введите бензин:")
-    return TR_GAS
-
-async def tr_gas(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["gas"] = update.message.text
-    await update.message.reply_text("Введите штраф:")
-    return TR_FINE
-
-async def tr_fine(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["fine"] = update.message.text
-    await update.message.reply_text("Введите бонус:")
-    return TR_BONUS
-
-async def tr_bonus(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_data[update.effective_chat.id]["bonus"] = update.message.text
-    d = user_data[update.effective_chat.id]
-    tr_ws.append_row([
-        d["date"], d["name"], d["type"], d["bt"], "", d["card"],
-        d["helper"], d["earned"], d["equip"], d["maint"], d["gas"],
-        d["time"], d["fine"], d["bonus"]
-    ])
-    await update.message.reply_text("✅ Данные TR/WORK сохранены.")
-    return ConversationHandler.END
-
-# === CANCEL ===
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Отменено.")
+    await update.message.reply_text("Операция отменена.")
     return ConversationHandler.END
 
-# === MAIN ===
+# === Запуск бота ===
 def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = ApplicationBuilder().token(TOKEN).build()
 
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
-            MODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, mode_handler)],
-            SUBMODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, submode_handler)],
-            GIM_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, gim_date)],
-            GIM_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, gim_name)],
-            GIM_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, gim_type)],
-            GIM_IN: [MessageHandler(filters.TEXT & ~filters.COMMAND, gim_in)],
-            GIM_HELPER: [MessageHandler(filters.TEXT & ~filters.COMMAND, gim_helper)],
-            GIM_EARNED: [MessageHandler(filters.TEXT & ~filters.COMMAND, gim_earned)],
-            TR_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, tr_date)],
-            TR_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, tr_name)],
-            TR_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, tr_type)],
-            TR_BT: [MessageHandler(filters.TEXT & ~filters.COMMAND, tr_bt)],
-            TR_CARD: [MessageHandler(filters.TEXT & ~filters.COMMAND, tr_card)],
-            TR_HELPER: [MessageHandler(filters.TEXT & ~filters.COMMAND, tr_helper)],
-            TR_EARNED: [MessageHandler(filters.TEXT & ~filters.COMMAND, tr_earned)],
-            TR_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, tr_time)],
-            TR_EQUIP: [MessageHandler(filters.TEXT & ~filters.COMMAND, tr_equip)],
-            TR_MAINT: [MessageHandler(filters.TEXT & ~filters.COMMAND, tr_maint)],
-            TR_GAS: [MessageHandler(filters.TEXT & ~filters.COMMAND, tr_gas)],
-            TR_FINE: [MessageHandler(filters.TEXT & ~filters.COMMAND, tr_fine)],
-            TR_BONUS: [MessageHandler(filters.TEXT & ~filters.COMMAND, tr_bonus)],
+            CHOOSE_MODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_mode)],
+            ENTER_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_date)],
+            ENTER_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_name)],
+            ENTER_WORK_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_work_type)],
+            ENTER_BT: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_bt)],
+            ENTER_CARD: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_card)],
+            ENTER_HELPER_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_helper_name)],
+            ENTER_EARNED: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_earned)],
+            ENTER_OT: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_ot)],
+            ENTER_DINCEL: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_dincel)],
+            ENTER_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_time)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
 
     app.add_handler(conv_handler)
-    app.run_polling()
+
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000)),
+        webhook_url="https://telegram-finance-bot-0ify.onrender.com"
+    )
 
 if __name__ == "__main__":
     main()
