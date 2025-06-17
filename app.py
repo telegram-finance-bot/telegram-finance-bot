@@ -1,11 +1,12 @@
 import os
+import json
 import gspread
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
     ConversationHandler, ContextTypes, filters
 )
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 from datetime import datetime
 
 # === Переменные окружения ===
@@ -14,8 +15,11 @@ CREDS_FILE = os.environ.get("CREDS_FILE")
 SPREADSHEET_NAME = os.environ.get("SHEET_NAME")
 
 # === Google Sheets Setup ===
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-credentials = ServiceAccountCredentials.from_json_keyfile_name(CREDS_FILE, scope)
+with open(CREDS_FILE) as source:
+    info = json.load(source)
+
+scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+credentials = Credentials.from_service_account_info(info, scopes=scopes)
 client = gspread.authorize(credentials)
 sheet = client.open(SPREADSHEET_NAME)
 
