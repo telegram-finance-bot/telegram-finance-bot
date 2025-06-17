@@ -1,8 +1,8 @@
 import os
 import json
 import gspread
-from datetime import datetime
 import logging
+from datetime import datetime
 from flask import Flask
 from threading import Thread
 
@@ -19,12 +19,13 @@ flask_app = Flask(__name__)
 
 @flask_app.route('/')
 def home():
+    print("✅ Flask пинг прошёл!")
     return "Bot is running!", 200
 
 def run_flask():
     flask_app.run(host="0.0.0.0", port=8000)
 
-# === Логгинг ===
+# === Логгирование ===
 logging.basicConfig(level=logging.INFO)
 
 # === Переменные окружения ===
@@ -32,14 +33,12 @@ TOKEN = os.environ["BOT_TOKEN"]
 SHEET_NAME = os.environ["SHEET_NAME"]
 CREDS_FILE = os.environ["CREDS_FILE"]
 
-# === Google Sheets ===
+# === Google Sheets подключение ===
 with open(CREDS_FILE) as f:
     creds_data = json.load(f)
-
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-credentials = Credentials.from_service_account_info(creds_data, scopes=SCOPES)
+scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+credentials = Credentials.from_service_account_info(creds_data, scopes=scopes)
 client = gspread.authorize(credentials)
-
 try:
     sheet = client.open(SHEET_NAME)
 except SpreadsheetNotFound:
@@ -51,7 +50,7 @@ CHOOSE_MODE, ENTER_DATE, ENTER_NAME, ENTER_TYPE, ENTER_BT, ENTER_CARD, ENTER_HEL
 
 # === Хендлеры ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logging.info("▶️ Получена команда /start")
+    logging.info("▶️ Команда /start получена от Telegram")
     await update.message.reply_text("Выберите режим: GIM или TR.")
     return CHOOSE_MODE
 
@@ -124,41 +123,25 @@ async def enter_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = context.user_data
     now = datetime.now().strftime("%-d-%b")
 
-    try:
-        if user["mode"] == "GIM":
+    if user["mode"] == "GIM":
+        row = [now, user["name"], user["work_type"], user["bt"], "", "", user["card"], "", "", "", user["helper"], user["earned"], "", "", "", "", user["time"]]
+        sheet.worksheet("GIM").append_row(row, value_input_option="USER_ENTERED")
+    elif user["mode"] == "TR":
+        if user["work_type"].upper() == "WORK":
             row = [now, user["name"], user["work_type"], user["bt"], "", "", user["card"], "", "", "", user["helper"], user["earned"], "", "", "", "", user["time"]]
-            sheet.worksheet("GIM").append_row(row, value_input_option="USER_ENTERED")
-        elif user["mode"] == "TR":
-            if user["work_type"].upper() == "WORK":
-                row = [now, user["name"], user["work_type"], user["bt"], "", "", user["card"], "", "", "", user["helper"], user["earned"], "", "", "", "", user["time"]]
-                sheet.worksheet("TR").append_row(row, value_input_option="USER_ENTERED")
-            else:
-                row = [""] * 18 + [user["earned"], user["time"]]
-                sheet.worksheet("TR").append_row(row, value_input_option="USER_ENTERED")
-        await update.message.reply_text("✅ Данные сохранены.")
-    except Exception as e:
-        logging.error(f"Ошибка при сохранении в Google Sheets: {e}")
-        await update.message.reply_text("❌ Ошибка при сохранении.")
+            sheet.worksheet("TR").append_row(row, value_input_option="USER_ENTERED")
+        else:
+            row = [""] * 18 + [user["earned"], user["time"]]
+            sheet.worksheet("TR").append_row(row, value_input_option="USER_ENTERED")
 
+    await update.message.reply_text("✅ Данные сохранены.")
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Операция отменена.")
     return ConversationHandler.END
 
-@flask_app.route('/')
-def home():
-    print("✅ Flask пинг прошёл!")
-    return "Bot is running!", 200
-    
-import logging
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logging.info("▶️ Команда /start получена от Telegram")
-    await update.message.reply_text("Выберите режим: GIM или TR.")
-    return CHOOSE_MODE
-    
-# === Запуск Telegram + Flask ===
+# === Основная функция запуска ===
 async def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
@@ -181,6 +164,7 @@ async def main():
     )
 
     app.add_handler(conv_handler)
+
     await app.bot.set_webhook("https://telegram-finance-bot-0ify.onrender.com")
     await app.run_webhook(
         listen="0.0.0.0",
@@ -188,6 +172,7 @@ async def main():
         webhook_url="https://telegram-finance-bot-0ify.onrender.com"
     )
 
+# === Запуск Flask + Telegram ===
 if __name__ == "__main__":
     from nest_asyncio import apply
     apply()
