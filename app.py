@@ -150,10 +150,12 @@ async def main():
     await app.bot.set_webhook("https://telegram-finance-bot-0ify.onrender.com")
 
     # Запуск Webhook сервера
-    await app.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000)),
-        webhook_url="https://telegram-finance-bot-0ify.onrender.com"
+await app.run_webhook(
+    listen="0.0.0.0",
+    port=int(os.environ.get("PORT", 10000)),
+    webhook_url="https://telegram-finance-bot-0ify.onrender.com",
+    webhook_path="/"
+)
     )
 
 if __name__ == "__main__":
