@@ -35,9 +35,11 @@ CREDS_FILE = os.environ["CREDS_FILE"]
 # === Google Sheets ===
 with open(CREDS_FILE) as f:
     creds_data = json.load(f)
+
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 credentials = Credentials.from_service_account_info(creds_data, scopes=SCOPES)
 client = gspread.authorize(credentials)
+
 try:
     sheet = client.open(SHEET_NAME)
 except SpreadsheetNotFound:
@@ -48,8 +50,6 @@ except SpreadsheetNotFound:
 CHOOSE_MODE, ENTER_DATE, ENTER_NAME, ENTER_TYPE, ENTER_BT, ENTER_CARD, ENTER_HELPER, ENTER_EARNED, ENTER_OT, ENTER_DINCEL, ENTER_TIME = range(11)
 
 # === Хендлеры ===
-aimport logging  # убедись, что это есть вверху
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info("▶️ Получена команда /start")
     await update.message.reply_text("Выберите режим: GIM или TR.")
@@ -124,18 +124,22 @@ async def enter_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = context.user_data
     now = datetime.now().strftime("%-d-%b")
 
-    if user["mode"] == "GIM":
-        row = [now, user["name"], user["work_type"], user["bt"], "", "", user["card"], "", "", "", user["helper"], user["earned"], "", "", "", "", user["time"]]
-        sheet.worksheet("GIM").append_row(row, value_input_option="USER_ENTERED")
-    elif user["mode"] == "TR":
-        if user["work_type"].upper() == "WORK":
+    try:
+        if user["mode"] == "GIM":
             row = [now, user["name"], user["work_type"], user["bt"], "", "", user["card"], "", "", "", user["helper"], user["earned"], "", "", "", "", user["time"]]
-            sheet.worksheet("TR").append_row(row, value_input_option="USER_ENTERED")
-        else:
-            row = [""] * 18 + [user["earned"], user["time"]]
-            sheet.worksheet("TR").append_row(row, value_input_option="USER_ENTERED")
+            sheet.worksheet("GIM").append_row(row, value_input_option="USER_ENTERED")
+        elif user["mode"] == "TR":
+            if user["work_type"].upper() == "WORK":
+                row = [now, user["name"], user["work_type"], user["bt"], "", "", user["card"], "", "", "", user["helper"], user["earned"], "", "", "", "", user["time"]]
+                sheet.worksheet("TR").append_row(row, value_input_option="USER_ENTERED")
+            else:
+                row = [""] * 18 + [user["earned"], user["time"]]
+                sheet.worksheet("TR").append_row(row, value_input_option="USER_ENTERED")
+        await update.message.reply_text("✅ Данные сохранены.")
+    except Exception as e:
+        logging.error(f"Ошибка при сохранении в Google Sheets: {e}")
+        await update.message.reply_text("❌ Ошибка при сохранении.")
 
-    await update.message.reply_text("✅ Данные сохранены.")
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
