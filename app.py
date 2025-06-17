@@ -8,6 +8,7 @@ from telegram.ext import (
 )
 from google.oauth2.service_account import Credentials
 from datetime import datetime
+import asyncio
 
 # === Переменные окружения ===
 TOKEN = os.environ.get("BOT_TOKEN")
@@ -91,49 +92,27 @@ async def enter_dincel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def enter_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["time"] = update.message.text
-
     user_data = context.user_data
     now = datetime.now().strftime("%-d-%b")
 
     if user_data["mode"] == "GIM":
         row = [
-            now,
-            user_data["name"],
-            user_data["work_type"],
-            user_data["bt"],
-            "", "",  # пропуск TR и AT
-            user_data["card"],
-            "", "", "",  # пропуск equipment, maintenance, gas
-            user_data["helper_name"],
-            user_data["earned"],
-            "", "", "", "",  # пропуск Gross → bonus
-            user_data["time"],
+            now, user_data["name"], user_data["work_type"], user_data["bt"],
+            "", "", user_data["card"], "", "", "", user_data["helper_name"],
+            user_data["earned"], "", "", "", "", user_data["time"]
         ]
         sheet.worksheet("GIM").append_row(row, value_input_option="USER_ENTERED")
 
     elif user_data["mode"] == "TR":
         if user_data["work_type"].upper() == "WORK":
             row = [
-                now,
-                user_data["name"],
-                user_data["work_type"],
-                user_data["bt"],
-                "", "",  # пропуск TR и AT
-                user_data["card"],
-                "", "", "",  # пропуск equipment, maintenance, gas
-                user_data["helper_name"],
-                user_data["earned"],
-                "", "", "", "",  # пропуск Gross → bonus
-                user_data["time"],
+                now, user_data["name"], user_data["work_type"], user_data["bt"],
+                "", "", user_data["card"], "", "", "", user_data["helper_name"],
+                user_data["earned"], "", "", "", "", user_data["time"]
             ]
             sheet.worksheet("TR").append_row(row, value_input_option="USER_ENTERED")
-
         elif user_data["work_type"].upper() == "OUT":
-            row = [
-                "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",  # пропуск
-                user_data["earned"],
-                user_data["time"]
-            ]
+            row = [""] * 18 + [user_data["earned"], user_data["time"]]
             sheet.worksheet("TR").append_row(row, value_input_option="USER_ENTERED")
 
     await update.message.reply_text("Данные сохранены.")
@@ -143,8 +122,8 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Операция отменена.")
     return ConversationHandler.END
 
-# === Запуск бота ===
-def main():
+# === Главная асинхронная функция ===
+async def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     conv_handler = ConversationHandler(
@@ -167,11 +146,15 @@ def main():
 
     app.add_handler(conv_handler)
 
-    app.run_webhook(
+    # Установка Webhook
+    await app.bot.set_webhook("https://telegram-finance-bot-0ify.onrender.com")
+
+    # Запуск Webhook сервера
+    await app.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
         webhook_url="https://telegram-finance-bot-0ify.onrender.com"
     )
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
