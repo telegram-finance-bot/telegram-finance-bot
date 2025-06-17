@@ -6,7 +6,7 @@ services:
     startCommand: "python3 app.py"
     envVars:
       - key: BOT_TOKEN
-        value: 7712104265:AAF2999juz76IU9MloLpgsBQWgMJklI5XeM
+        value: "ТВОЙ_ТОКЕН_ОТСЮДА"  # замени
       - key: SHEET_NAME
         value: hesabla
       - key: CREDS_FILE
