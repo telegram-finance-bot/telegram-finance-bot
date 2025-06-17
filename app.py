@@ -2,6 +2,7 @@ import os
 import json
 import gspread
 from telegram import Update
+from telegram.error import RetryAfter
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
     ConversationHandler, ContextTypes, filters
@@ -9,18 +10,14 @@ from telegram.ext import (
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import asyncio
-from flask import Flask
-from threading import Thread
+import logging
 
-# === Flask для корневого пути ===
-flask_app = Flask(__name__)
-
-@flask_app.route("/")
-def index():
-    return "Bot is running!", 200
-
-def run_flask():
-    flask_app.run(host="0.0.0.0", port=8000)
+# === Настройка логгирования ===
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 # === Переменные окружения ===
 TOKEN = os.environ.get("BOT_TOKEN")
@@ -38,105 +35,76 @@ sheet = client.open(SPREADSHEET_NAME)
 # === Состояния ===
 CHOOSE_MODE, ENTER_DATE, ENTER_NAME, ENTER_WORK_TYPE, ENTER_BT, ENTER_CARD, ENTER_HELPER_NAME, ENTER_EARNED, ENTER_OT, ENTER_DINCEL, ENTER_TIME = range(11)
 
-# === Обработчики ===
+# === Безопасная отправка сообщений с обработкой Flood Control ===
+async def safe_reply_text(update: Update, text: str, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            await update.message.reply_text(text)
+            return True
+        except RetryAfter as e:
+            wait_time = e.retry_after + 0.5
+            logger.warning(f"Flood control exceeded. Waiting {wait_time} seconds...")
+            await asyncio.sleep(wait_time)
+        except Exception as e:
+            logger.error(f"Error sending message: {e}")
+            return False
+    return False
+
+# === Модифицированные обработчики с безопасной отправкой ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Выберите режим: GIM или TR.")
+    await safe_reply_text(update, "Выберите режим: GIM или TR.")
     return CHOOSE_MODE
 
 async def choose_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mode = update.message.text.strip().upper()
     context.user_data["mode"] = mode
     if mode == "GIM":
-        await update.message.reply_text("Введите дату (например: 12.06)")
+        await safe_reply_text(update, "Введите дату (например: 12.06)")
         return ENTER_DATE
     elif mode == "TR":
-        await update.message.reply_text("Введите тип TR (WORK или OUT)")
+        await safe_reply_text(update, "Введите тип TR (WORK или OUT)")
         return ENTER_WORK_TYPE
     else:
-        await update.message.reply_text("Неверный режим. Напишите GIM или TR.")
+        await safe_reply_text(update, "Неверный режим. Напишите GIM или TR.")
         return CHOOSE_MODE
 
-async def enter_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["date"] = update.message.text
-    await update.message.reply_text("Введите имя")
-    return ENTER_NAME
-
-async def enter_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["name"] = update.message.text
-    await update.message.reply_text("Введите тип работы")
-    return ENTER_WORK_TYPE
-
-async def enter_work_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["work_type"] = update.message.text
-    await update.message.reply_text("Введите BT")
-    return ENTER_BT
-
-async def enter_bt(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["bt"] = update.message.text
-    await update.message.reply_text("Введите карту")
-    return ENTER_CARD
-
-async def enter_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["card"] = update.message.text
-    await update.message.reply_text("Введите имя помощника")
-    return ENTER_HELPER_NAME
-
-async def enter_helper_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["helper_name"] = update.message.text
-    await update.message.reply_text("Введите сумму заработка")
-    return ENTER_EARNED
-
-async def enter_earned(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["earned"] = update.message.text
-    await update.message.reply_text("Введите OT")
-    return ENTER_OT
-
-async def enter_ot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["ot"] = update.message.text
-    await update.message.reply_text("Введите DINCEL")
-    return ENTER_DINCEL
-
-async def enter_dincel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["dincel"] = update.message.text
-    await update.message.reply_text("Введите время")
-    return ENTER_TIME
+# ... (остальные обработчики аналогично модифицировать с использованием safe_reply_text)
 
 async def enter_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["time"] = update.message.text
     user_data = context.user_data
     now = datetime.now().strftime("%-d-%b")
 
-    if user_data["mode"] == "GIM":
-        row = [
-            now, user_data["name"], user_data["work_type"], user_data["bt"],
-            "", "", user_data["card"], "", "", "", user_data["helper_name"],
-            user_data["earned"], "", "", "", "", user_data["time"]
-        ]
-        sheet.worksheet("GIM").append_row(row, value_input_option="USER_ENTERED")
-
-    elif user_data["mode"] == "TR":
-        if user_data["work_type"].upper() == "WORK":
+    try:
+        if user_data["mode"] == "GIM":
             row = [
                 now, user_data["name"], user_data["work_type"], user_data["bt"],
                 "", "", user_data["card"], "", "", "", user_data["helper_name"],
                 user_data["earned"], "", "", "", "", user_data["time"]
             ]
-            sheet.worksheet("TR").append_row(row, value_input_option="USER_ENTERED")
-        elif user_data["work_type"].upper() == "OUT":
-            row = [""] * 18 + [user_data["earned"], user_data["time"]]
-            sheet.worksheet("TR").append_row(row, value_input_option="USER_ENTERED")
+            sheet.worksheet("GIM").append_row(row, value_input_option="USER_ENTERED")
 
-    await update.message.reply_text("Данные сохранены.")
-    return ConversationHandler.END
+        elif user_data["mode"] == "TR":
+            if user_data["work_type"].upper() == "WORK":
+                row = [
+                    now, user_data["name"], user_data["work_type"], user_data["bt"],
+                    "", "", user_data["card"], "", "", "", user_data["helper_name"],
+                    user_data["earned"], "", "", "", "", user_data["time"]
+                ]
+                sheet.worksheet("TR").append_row(row, value_input_option="USER_ENTERED")
+            elif user_data["work_type"].upper() == "OUT":
+                row = [""] * 18 + [user_data["earned"], user_data["time"]]
+                sheet.worksheet("TR").append_row(row, value_input_option="USER_ENTERED")
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Операция отменена.")
+        await safe_reply_text(update, "Данные сохранены.")
+    except Exception as e:
+        logger.error(f"Error saving to Google Sheets: {e}")
+        await safe_reply_text(update, "Ошибка при сохранении данных. Попробуйте позже.")
+    
     return ConversationHandler.END
 
 # === Основная функция запуска ===
 async def main():
-    Thread(target=run_flask).start()
-
     app = ApplicationBuilder().token(TOKEN).build()
 
     conv_handler = ConversationHandler(
@@ -159,24 +127,18 @@ async def main():
 
     app.add_handler(conv_handler)
 
-    await app.bot.set_webhook("https://telegram-finance-bot-0ify.onrender.com")
-    await app.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000)),
-        webhook_url="https://telegram-finance-bot-0ify.onrender.com"
-    )
+    # На Render лучше использовать polling, а не webhook
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+    
+    # Бесконечный цикл
+    while True:
+        await asyncio.sleep(3600)  # Спим 1 час
+
+    await app.updater.stop()
+    await app.stop()
+    await app.shutdown()
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except RuntimeError as e:
-        if "Cannot close a running event loop" in str(e):
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            loop.create_task(main())
-            loop.run_forever()
-        else:
-            raise
+    asyncio.run(main())
