@@ -14,17 +14,17 @@ from telegram.ext import (
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
 
-# === Flask (для проверки работоспособности Render) ===
+# === Flask для Render ping ===
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
 def home():
-    return "✅ Bot is running!", 200
+    return "Bot is running!", 200
 
 def run_flask():
     flask_app.run(host="0.0.0.0", port=8000)
 
-# === Логгирование ===
+# === Logging ===
 logging.basicConfig(level=logging.INFO)
 
 # === Переменные окружения ===
@@ -36,13 +36,9 @@ CREDS_FILE = os.environ["CREDS_FILE"]
 with open(CREDS_FILE) as f:
     creds_data = json.load(f)
 
-scopes = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
-credentials = Credentials.from_service_account_info(creds_data, scopes=scopes)
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+credentials = Credentials.from_service_account_info(creds_data, scopes=SCOPES)
 client = gspread.authorize(credentials)
-
 try:
     sheet = client.open(SHEET_NAME)
 except SpreadsheetNotFound:
@@ -52,9 +48,9 @@ except SpreadsheetNotFound:
 # === Состояния ===
 CHOOSE_MODE, ENTER_DATE, ENTER_NAME, ENTER_TYPE, ENTER_BT, ENTER_CARD, ENTER_HELPER, ENTER_EARNED, ENTER_OT, ENTER_DINCEL, ENTER_TIME = range(11)
 
-# === Хендлеры ===
+# === Обработчики ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logging.info("▶️ /start получена")
+    logging.info("▶️ /start вызван")
     await update.message.reply_text("Выберите режим: GIM или TR.")
     return CHOOSE_MODE
 
@@ -142,7 +138,7 @@ async def enter_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Операция отменена.")
+    await update.message.reply_text("Операция отменена.")
     return ConversationHandler.END
 
 # === Основной запуск ===
@@ -169,14 +165,18 @@ async def main():
 
     app.add_handler(conv_handler)
 
-    logging.info("✅ Бот запущен в режиме polling")
-    await app.run_polling()
+    await app.bot.delete_webhook(drop_pending_updates=True)  # 🔥 Удаляет предыдущий webhook
+    await app.bot.set_webhook("https://telegram-finance-bot-0ify.onrender.com")
+    await app.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000)),
+        webhook_url="https://telegram-finance-bot-0ify.onrender.com"
+    )
 
 if __name__ == "__main__":
     from nest_asyncio import apply
     apply()
     Thread(target=run_flask).start()
-
     import asyncio
     try:
         asyncio.run(main())
