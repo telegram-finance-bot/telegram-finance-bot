@@ -6,7 +6,10 @@ services:
     startCommand: python app.py
     envVars:
       - key: BOT_TOKEN
-        value: 7712104265:AAF2999juz76IU9MloLpgsBQWgMJklI5XeM
+        valueFrom: 7712104265:AAF2999juz76IU9MloLpgsBQWgMJklI5XeM
+          secretKeyRef:
+            name: telegram-bot-token
+            key: BOT_TOKEN
       - key: CREDS_FILE
         value: /etc/secrets/gspread_key.json
       - key: SHEET_NAME
@@ -14,6 +17,7 @@ services:
       - key: WEBHOOK_URL
         value: https://telegram-finance-bot-0ify.onrender.com
     plan: free
-    secretFiles:
-      - name: gspread_key.json
-        mountPath: /etc/secrets/gspread_key.json
+    secrets:
+      - name: gspread-service-account
+        fileName: gspread_key.json
+        mountPath: /etc/secrets
