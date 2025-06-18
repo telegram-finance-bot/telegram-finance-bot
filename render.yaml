@@ -2,11 +2,11 @@ services:
   - type: web
     name: telegram-finance-bot
     env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python3 app.py"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 app.py
     envVars:
       - key: BOT_TOKEN
-        value: "ТВОЙ_ТОКЕН_ОТСЮДА"  # замени
+        value: 7712104265:AAF2999juz76IU9MloLpgsBQWgMJklI5XeM
       - key: SHEET_NAME
         value: hesabla
       - key: CREDS_FILE
