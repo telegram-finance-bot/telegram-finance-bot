@@ -2,15 +2,18 @@ services:
   - type: web
     name: telegram-finance-bot
     env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python3 app.py"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
     envVars:
       - key: BOT_TOKEN
         value: 7712104265:AAF2999juz76IU9MloLpgsBQWgMJklI5XeM
-      - key: SHEET_NAME
-        value: hesabla
       - key: CREDS_FILE
         value: /etc/secrets/gspread_key.json
+      - key: SHEET_NAME
+        value: hesabla
+      - key: WEBHOOK_URL
+        value: https://telegram-finance-bot-0ify.onrender.com
+    plan: free
     secretFiles:
       - name: gspread_key.json
         mountPath: /etc/secrets/gspread_key.json
