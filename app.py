@@ -1,24 +1,24 @@
 import os
 import json
 import gspread
-from datetime import datetime
 import logging
+from datetime import datetime
 from flask import Flask
 from threading import Thread
-
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler,
     ConversationHandler, ContextTypes, filters
 )
 from google.oauth2.service_account import Credentials
+from gspread.exceptions import SpreadsheetNotFound
 
 # === Flask ===
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
 def home():
-    return "Bot is running!", 200
+    return "✅ Bot is running!", 200
 
 def run_flask():
     flask_app.run(host="0.0.0.0", port=8000)
@@ -26,7 +26,7 @@ def run_flask():
 # === Логгирование ===
 logging.basicConfig(level=logging.INFO)
 
-# === Переменные ===
+# === Переменные среды ===
 TOKEN = os.environ["BOT_TOKEN"]
 SHEET_NAME = os.environ["SHEET_NAME"]
 CREDS_FILE = os.environ["CREDS_FILE"]
@@ -34,35 +34,37 @@ CREDS_FILE = os.environ["CREDS_FILE"]
 # === Google Sheets ===
 with open(CREDS_FILE) as f:
     creds_data = json.load(f)
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
+
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 credentials = Credentials.from_service_account_info(creds_data, scopes=SCOPES)
 client = gspread.authorize(credentials)
-sheet = client.open(SHEET_NAME)
+try:
+    sheet = client.open(SHEET_NAME)
+except SpreadsheetNotFound:
+    logging.error("Google Sheet не найден. Проверь имя и доступ.")
+    exit(1)
 
 # === Состояния ===
 CHOOSE_MODE, ENTER_DATE, ENTER_NAME, ENTER_TYPE, ENTER_BT, ENTER_CARD, ENTER_HELPER, ENTER_EARNED, ENTER_OT, ENTER_DINCEL, ENTER_TIME = range(11)
 
 # === Хендлеры ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logging.info(f"/start от {update.effective_user.id}")
+    logging.info("▶️ Получена команда /start")
     await update.message.reply_text("Выберите режим: GIM или TR.")
     return CHOOSE_MODE
 
 async def choose_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mode = update.message.text.strip().upper()
+    if mode not in ["GIM", "TR"]:
+        await update.message.reply_text("Пожалуйста, выбери GIM или TR.")
+        return CHOOSE_MODE
     context.user_data["mode"] = mode
     if mode == "GIM":
         await update.message.reply_text("Введите дату (ДД.ММ):")
         return ENTER_DATE
-    elif mode == "TR":
+    else:
         await update.message.reply_text("Введите тип TR: WORK или OUT")
         return ENTER_TYPE
-    else:
-        await update.message.reply_text("Только GIM или TR.")
-        return CHOOSE_MODE
 
 async def enter_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["date"] = update.message.text
@@ -76,8 +78,8 @@ async def enter_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def enter_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["work_type"] = update.message.text
-    if context.user_data["mode"] == "TR" and update.message.text.strip().upper() == "OUT":
-        await update.message.reply_text("Сумма (earned):")
+    if context.user_data["mode"] == "TR" and context.user_data["work_type"].upper() == "OUT":
+        await update.message.reply_text("Введите сумму (earned):")
         return ENTER_EARNED
     await update.message.reply_text("Введите BT:")
     return ENTER_BT
@@ -117,18 +119,18 @@ async def enter_dincel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def enter_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["time"] = update.message.text
-    u = context.user_data
+    user = context.user_data
     now = datetime.now().strftime("%-d-%b")
 
-    if u["mode"] == "GIM":
-        row = [now, u["name"], u["work_type"], u["bt"], "", "", u["card"], "", "", "", u["helper"], u["earned"], "", "", "", "", u["time"]]
+    if user["mode"] == "GIM":
+        row = [now, user["name"], user["work_type"], user["bt"], "", "", user["card"], "", "", "", user["helper"], user["earned"], "", "", "", "", user["time"]]
         sheet.worksheet("GIM").append_row(row, value_input_option="USER_ENTERED")
-    elif u["mode"] == "TR":
-        if u["work_type"].upper() == "WORK":
-            row = [now, u["name"], u["work_type"], u["bt"], "", "", u["card"], "", "", "", u["helper"], u["earned"], "", "", "", "", u["time"]]
+    elif user["mode"] == "TR":
+        if user["work_type"].upper() == "WORK":
+            row = [now, user["name"], user["work_type"], user["bt"], "", "", user["card"], "", "", "", user["helper"], user["earned"], "", "", "", "", user["time"]]
             sheet.worksheet("TR").append_row(row, value_input_option="USER_ENTERED")
         else:
-            row = [""] * 18 + [u["earned"], u["time"]]
+            row = [""] * 18 + [user["earned"], user["time"]]
             sheet.worksheet("TR").append_row(row, value_input_option="USER_ENTERED")
 
     await update.message.reply_text("✅ Данные сохранены.")
@@ -138,7 +140,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Операция отменена.")
     return ConversationHandler.END
 
-# === Запуск ===
+# === Основной запуск ===
 async def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
@@ -162,16 +164,17 @@ async def main():
 
     app.add_handler(conv_handler)
 
-    await app.bot.set_webhook("https://telegram-finance-bot-0ify.onrender.com")
+    webhook_url = "https://telegram-finance-bot-0ify.onrender.com"
+    await app.bot.set_webhook(webhook_url)
     await app.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
-        webhook_url="https://telegram-finance-bot-0ify.onrender.com"
+        webhook_url=webhook_url
     )
 
 if __name__ == "__main__":
-    from nest_asyncio import apply
     import asyncio
+    from nest_asyncio import apply
     apply()
     Thread(target=run_flask).start()
     try:
