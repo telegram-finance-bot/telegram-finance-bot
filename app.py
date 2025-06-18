@@ -14,17 +14,17 @@ from telegram.ext import (
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound
 
-# === Flask для Render ping ===
+# === Flask для Render пинга ===
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
 def home():
-    return "Bot is running!", 200
+    return "✅ Bot is running!", 200
 
 def run_flask():
     flask_app.run(host="0.0.0.0", port=8000)
 
-# === Logging ===
+# === Логгирование ===
 logging.basicConfig(level=logging.INFO)
 
 # === Переменные окружения ===
@@ -32,25 +32,23 @@ TOKEN = os.environ["BOT_TOKEN"]
 SHEET_NAME = os.environ["SHEET_NAME"]
 CREDS_FILE = os.environ["CREDS_FILE"]
 
-# === Google Sheets подключение ===
+# === Google Sheets ===
 with open(CREDS_FILE) as f:
     creds_data = json.load(f)
-
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-credentials = Credentials.from_service_account_info(creds_data, scopes=SCOPES)
+scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file"]
+credentials = Credentials.from_service_account_info(creds_data, scopes=scopes)
 client = gspread.authorize(credentials)
 try:
     sheet = client.open(SHEET_NAME)
 except SpreadsheetNotFound:
-    logging.error("Google Sheet не найден. Проверь имя таблицы и доступ.")
+    logging.error("Google Sheet не найден.")
     exit(1)
 
 # === Состояния ===
 CHOOSE_MODE, ENTER_DATE, ENTER_NAME, ENTER_TYPE, ENTER_BT, ENTER_CARD, ENTER_HELPER, ENTER_EARNED, ENTER_OT, ENTER_DINCEL, ENTER_TIME = range(11)
 
-# === Обработчики ===
+# === Хендлеры ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logging.info("▶️ /start вызван")
     await update.message.reply_text("Выберите режим: GIM или TR.")
     return CHOOSE_MODE
 
@@ -141,7 +139,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Операция отменена.")
     return ConversationHandler.END
 
-# === Основной запуск ===
+# === Основная логика запуска ===
 async def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
@@ -165,7 +163,6 @@ async def main():
 
     app.add_handler(conv_handler)
 
-    await app.bot.delete_webhook(drop_pending_updates=True)  # 🔥 Удаляет предыдущий webhook
     await app.bot.set_webhook("https://telegram-finance-bot-0ify.onrender.com")
     await app.run_webhook(
         listen="0.0.0.0",
@@ -181,5 +178,6 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except RuntimeError:
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(main())
+        import traceback
+        print("❗ Ошибка запуска:")
+        traceback.print_exc()
