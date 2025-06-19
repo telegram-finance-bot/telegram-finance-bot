@@ -94,24 +94,25 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(help_text)
 
 # ===== Запуск приложения =====
-async def main():
+def main():
     if not check_environment():
         exit(1)
-    
+
     sheet = init_google_sheets()
     if not sheet:
         exit(1)
-    
+
     try:
         app = ApplicationBuilder().token(os.environ.get("BOT_TOKEN")).build()
-        
+
         # Регистрация обработчиков команд
         app.add_handler(CommandHandler("start", start))
         app.add_handler(CommandHandler("help", help_command))
-        
+
         # Настройка вебхука
         webhook_url = os.environ.get("WEBHOOK_URL")
-        await app.run_webhook(
+
+        app.run_webhook(
             listen="0.0.0.0",
             port=int(os.environ.get("PORT", 10000)),
             webhook_url=webhook_url,
@@ -121,13 +122,6 @@ async def main():
         logger.error(f"Ошибка при запуске бота: {str(e)}")
         exit(1)
 
-if __name__ == "__main__":
-    import asyncio
 
-    try:
-        asyncio.run(main())
-    except RuntimeError:
-        # fallback для "event loop already running"
-        import nest_asyncio
-        nest_asyncio.apply()
-        asyncio.get_event_loop().run_until_complete(main())
+if __name__ == "__main__":
+    main()
