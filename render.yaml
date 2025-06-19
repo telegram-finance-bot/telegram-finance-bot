@@ -7,12 +7,14 @@ services:
     envVars:
       - key: WEBHOOK_URL
         value: https://telegram-finance-bot-0ify.onrender.com
+      - key: CREDS_FILE
+        value: /etc/secrets/gspread_key.json
     secrets:
       - name: telegram-bot-secret
         envVar: BOT_TOKEN
       - name: google-sheet-secret
         envVar: SHEET_ID
-      - name: gspread-service-account
-        fileName: gspread_key.json
-        mountPath: /etc/secrets
     plan: free
+    secretFiles:
+      - name: gspread_key.json
+        mountPath: /etc/secrets
