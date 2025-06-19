@@ -13,7 +13,7 @@ from telegram.ext import (
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import WorksheetNotFound
 
-# Логирование
+# Логгер
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 async def handle_health_check(request):
     return web.Response(text="OK", status=200)
 
-# Проверка окружения
+# Проверка переменных окружения
 def check_environment():
     required = ["BOT_TOKEN", "SHEET_ID", "CREDS_FILE", "WEBHOOK_URL", "PORT"]
     for key in required:
@@ -36,17 +36,14 @@ def check_environment():
         return False
     return True
 
-# Подключение к Google Sheets
+# Google Sheets
 def init_google_sheets():
     try:
         with open(os.environ["CREDS_FILE"]) as f:
             creds_data = json.load(f)
         credentials = Credentials.from_service_account_info(
             creds_data,
-            scopes=[
-                "https://www.googleapis.com/auth/spreadsheets",
-                "https://www.googleapis.com/auth/drive.file"
-            ]
+            scopes=["https://www.googleapis.com/auth/spreadsheets"]
         )
         client = gspread.authorize(credentials)
         sheet = client.open_by_key(os.environ["SHEET_ID"])
@@ -62,14 +59,14 @@ def init_google_sheets():
         logger.error(f"❌ Ошибка Google Sheets: {e}")
         return None
 
-# Команды бота
+# Команды
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Привет! Бот работает ✅")
+    await update.message.reply_text("Бот работает! ✅")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("/start — запуск\n/help — помощь")
 
-# Асинхронный запуск
+# Основной запуск
 async def async_main():
     if not check_environment():
         raise RuntimeError("❌ Переменные окружения не настроены")
@@ -78,33 +75,20 @@ async def async_main():
     if not sheet:
         raise RuntimeError("❌ Не удалось подключиться к Google Sheets")
 
-    # Telegram приложение
-    application = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).build()
+    app = web.Application()
+    app.add_routes([web.get("/", handle_health_check)])
+
+    application = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).web_app(app).build()
     application.bot_data["sheet"] = sheet
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
 
-    # aiohttp-приложение и запуск сервера вручную
-    aio_app = web.Application()
-    aio_app.add_routes([web.get("/", handle_health_check)])
-
-    runner = web.AppRunner(aio_app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", int(os.environ["PORT"]))
-    await site.start()
-    logger.info(f"🌐 AIOHTTP сервер слушает порт {os.environ['PORT']}")
-
-    # Запуск Telegram webhook
-    await application.initialize()
-    await application.start()
-    await application.updater.start_webhook(
+    await application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ["PORT"]),
-        webhook_url=os.environ["WEBHOOK_URL"]
+        webhook_url=os.environ["WEBHOOK_URL"],
+        drop_pending_updates=True
     )
-    logger.info("✅ Webhook установлен")
-    await application.updater.wait_until_closed()
 
-# Запуск
 if __name__ == "__main__":
     asyncio.run(async_main())
