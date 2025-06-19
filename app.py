@@ -2,15 +2,14 @@ import os
 import json
 import gspread
 import logging
-from datetime import datetime
 from telegram import Update
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler,
+    ApplicationBuilder,
+    CommandHandler,
     ContextTypes
 )
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import WorksheetNotFound
-from flask import Flask, request
 
 # ===== Логгер =====
 logging.basicConfig(
@@ -19,20 +18,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ===== Flask app для webhook endpoint =====
-flask_app = Flask(__name__)
-
-@flask_app.route("/", methods=["GET"])
-def index():
-    return "Webhook is up!", 200
-
 # ===== Проверка окружения =====
 def check_environment():
     required_vars = {
         'BOT_TOKEN': os.environ.get("BOT_TOKEN"),
         'SHEET_ID': os.environ.get("SHEET_ID"),
         'CREDS_FILE': os.environ.get("CREDS_FILE"),
-        'WEBHOOK_URL': os.environ.get("WEBHOOK_URL")
+        'WEBHOOK_URL': os.environ.get("WEBHOOK_URL"),
+        'PORT': os.environ.get("PORT", "10000")
     }
     
     logger.info("Проверка переменных окружения:")
@@ -85,40 +78,45 @@ def init_google_sheets():
         logger.error(f"Ошибка при работе с Google Sheets: {str(e)}")
         return None
 
-# ===== Обработчики =====
+# ===== Обработчики команд =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Бот запущен! Используйте /help для списка команд.")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("/start — запустить бота\n/help — помощь")
+    help_text = """
+    Доступные команды:
+    /start - Запустить бота
+    /help - Показать это сообщение
+    """
+    await update.message.reply_text(help_text)
 
-# ===== Главная функция запуска =====
+# ===== Основная функция =====
 def main():
     if not check_environment():
-        exit(1)
-
+        raise RuntimeError("Проверка окружения не пройдена")
+    
     sheet = init_google_sheets()
     if not sheet:
-        exit(1)
-
+        raise RuntimeError("Не удалось инициализировать Google Sheets")
+    
     try:
         application = ApplicationBuilder().token(os.environ.get("BOT_TOKEN")).build()
-
+        
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
-
-        webhook_url = os.environ.get("WEBHOOK_URL")
-
+        
         application.run_webhook(
             listen="0.0.0.0",
-            port=int(os.environ.get("PORT", 10000)),
-            webhook_url=webhook_url,
-            allowed_updates=Update.ALL_TYPES,
+            port=int(os.environ.get("PORT")),
+            webhook_url=os.environ.get("WEBHOOK_URL"),
             drop_pending_updates=True
         )
+        
+        logger.info("Бот успешно запущен в режиме webhook")
+        
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {str(e)}")
-        exit(1)
+        raise
 
 if __name__ == "__main__":
     main()
