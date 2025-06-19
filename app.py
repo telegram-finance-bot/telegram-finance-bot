@@ -2,6 +2,7 @@ import os
 import json
 import gspread
 import logging
+import threading
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -10,6 +11,7 @@ from telegram.ext import (
 )
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import WorksheetNotFound
+from aiohttp import web
 
 # ===== Логгер =====
 logging.basicConfig(
@@ -18,14 +20,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ===== Проверка окружения =====
+# ===== AIOHTTP health-check =====
+async def handle_health_check(request):
+    return web.Response(text="OK", status=200)
+
+def run_health_server():
+    app = web.Application()
+    app.add_routes([web.get("/", handle_health_check)])
+    port = int(os.environ.get("PORT", "10000"))
+    web.run_app(app, port=port)
+
+# ===== Проверка переменных окружения =====
 def check_environment():
     required_vars = {
         'BOT_TOKEN': os.environ.get("BOT_TOKEN"),
         'SHEET_ID': os.environ.get("SHEET_ID"),
         'CREDS_FILE': os.environ.get("CREDS_FILE"),
-        'WEBHOOK_URL': os.environ.get("WEBHOOK_URL"),
-        'PORT': os.environ.get("PORT", "10000")
+        'WEBHOOK_URL': os.environ.get("WEBHOOK_URL")
     }
 
     logger.info("Проверка переменных окружения:")
@@ -44,7 +55,7 @@ def check_environment():
 
     return True
 
-# ===== Подключение к Google Sheets =====
+# ===== Подключение Google Sheets =====
 def init_google_sheets():
     try:
         creds_file = os.environ.get("CREDS_FILE")
@@ -90,10 +101,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     await update.message.reply_text(help_text)
 
-# ===== Health Check Endpoint =====
-async def handle_health_check():
-    return web.Response(text="OK", status=200)
-
 # ===== Основная функция =====
 def main():
     if not check_environment():
@@ -103,18 +110,17 @@ def main():
     if not sheet:
         raise RuntimeError("Не удалось инициализировать Google Sheets")
 
+    # Запускаем aiohttp-сервер в отдельном потоке для health-check
+    threading.Thread(target=run_health_server, daemon=True).start()
+
     try:
         application = ApplicationBuilder().token(os.environ.get("BOT_TOKEN")).build()
-
-        # Добавляем health check endpoint
-        application.web_app.add_routes([web.get("/", handle_health_check)])
-
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
 
         application.run_webhook(
             listen="0.0.0.0",
-            port=int(os.environ.get("PORT")),
+            port=8443,
             webhook_url=os.environ.get("WEBHOOK_URL"),
             drop_pending_updates=True
         )
