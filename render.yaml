@@ -4,16 +4,32 @@ services:
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: python app.py
+    plan: free
+
     envVars:
+      - key: PORT
+        value: 10000
+      - key: BOT_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: telegram-secrets
+            key: BOT_TOKEN
+      - key: SHEET_ID
+        valueFrom:
+          secretKeyRef:
+            name: telegram-secrets
+            key: SHEET_ID
       - key: WEBHOOK_URL
-        value: https://telegram-finance-bot-0ify.onrender.com
+        valueFrom:
+          secretKeyRef:
+            name: telegram-secrets
+            key: WEBHOOK_URL
       - key: CREDS_FILE
         value: /etc/secrets/gspread_key.json
-      - key: SHEET_ID
-        value: 1n89yGxSXW1uBFmGBWuheXNmi4oPuhXqwnJQB3t7VQeo
-      - key: BOT_TOKEN
-        value: 7712104265:AAF2999juz76IU9MloLpgsBQWgMJklI5XeM
+
     secretFiles:
-      - name: gspread_key.json
+      - name: telegram-secrets
         mountPath: /etc/secrets
-    plan: free
+        files:
+          - name: gspread_key.json
+            path: gspread_key.json
