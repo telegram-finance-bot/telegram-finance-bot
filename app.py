@@ -10,6 +10,7 @@ from telegram.ext import (
 )
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import WorksheetNotFound
+from aiohttp import web
 
 # ===== Логгер =====
 logging.basicConfig(
@@ -17,6 +18,10 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# ===== Health Check Handler =====
+async def health_check(request):
+    return web.Response(text="OK", status=200)
 
 # ===== Проверка окружения =====
 def check_environment():
@@ -102,9 +107,14 @@ def main():
     try:
         application = ApplicationBuilder().token(os.environ.get("BOT_TOKEN")).build()
         
+        # Регистрация обработчиков команд
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
         
+        # Добавляем health check endpoint
+        application.web_app.add_routes([web.get("/", health_check)])
+        
+        # Настройка вебхука
         application.run_webhook(
             listen="0.0.0.0",
             port=int(os.environ.get("PORT")),
@@ -117,29 +127,6 @@ def main():
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {str(e)}")
         raise
-
-from aiohttp import web
-
-async def health_check(request):
-    return web.Response(text="OK", status=200)
-
-def main():
-    ...
-    application = ApplicationBuilder().token(os.environ.get("BOT_TOKEN")).build()
-    
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    
-    # Health check для Render и Telegram
-    application.web_app.add_routes([web.get("/", health_check)])
-    
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT")),
-        webhook_url=os.environ.get("WEBHOOK_URL"),
-        drop_pending_updates=True
-    )
-
 
 if __name__ == "__main__":
     main()
