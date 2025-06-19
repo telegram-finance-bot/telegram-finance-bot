@@ -13,78 +13,87 @@ from telegram.ext import (
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import SpreadsheetNotFound, APIError, WorksheetNotFound
 
-# ===== Инициализация логгера =====
+# ===== Настройка логгера =====
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# ===== Проверка переменных окружения =====
+# ===== Проверка окружения =====
 def check_environment():
-    """Проверка наличия всех необходимых переменных"""
-    logger.info("=== ПРОВЕРКА ПЕРЕМЕННЫХ ===")
+    """Проверка всех необходимых переменных"""
+    required_vars = {
+        'BOT_TOKEN': os.environ.get("BOT_TOKEN"),
+        'SHEET_ID': os.environ.get("SHEET_ID"),
+        'CREDS_FILE': os.environ.get("CREDS_FILE"),
+        'WEBHOOK_URL': os.environ.get("WEBHOOK_URL")
+    }
     
-    TOKEN = os.environ.get("BOT_TOKEN")
-    SHEET_ID = os.environ.get("SHEET_ID")
-    CREDS_FILE = os.environ.get("CREDS_FILE")
-    WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
-
-    logger.info(f"TOKEN: {'установлен' if TOKEN else 'НЕТ'}")
-    logger.info(f"SHEET_ID: {'установлен' if SHEET_ID else 'НЕТ'}")
-    logger.info(f"CREDS_FILE: {'существует' if CREDS_FILE and os.path.exists(CREDS_FILE) else 'НЕТ'}")
-    logger.info(f"WEBHOOK_URL: {'установлен' if WEBHOOK_URL else 'НЕТ'}")
-
-    if not all([TOKEN, SHEET_ID, CREDS_FILE, WEBHOOK_URL]):
-        missing = []
-        if not TOKEN: missing.append("BOT_TOKEN")
-        if not SHEET_ID: missing.append("SHEET_ID")
-        if not CREDS_FILE: missing.append("CREDS_FILE")
-        if not WEBHOOK_URL: missing.append("WEBHOOK_URL")
+    logger.info("Проверка переменных окружения:")
+    for key, value in required_vars.items():
+        status = "✓" if value else "✗"
+        logger.info(f"{key}: {status}")
+    
+    if not all(required_vars.values()):
+        missing = [k for k, v in required_vars.items() if not v]
         logger.error(f"Отсутствуют переменные: {', '.join(missing)}")
         return False
     
-    if not os.path.exists(CREDS_FILE):
-        logger.error(f"Файл учетных данных не найден: {CREDS_FILE}")
+    if not os.path.exists(required_vars['CREDS_FILE']):
+        logger.error(f"Файл учетных данных не найден: {required_vars['CREDS_FILE']}")
         return False
     
     return True
 
-# ===== Инициализация Google Sheets =====
+# ===== Работа с Google Sheets =====
 def init_google_sheets():
     try:
-        CREDS_FILE = os.environ.get("CREDS_FILE")
-        SHEET_ID = os.environ.get("SHEET_ID")
+        creds_file = os.environ.get("CREDS_FILE")
+        sheet_id = os.environ.get("SHEET_ID")
         
-        with open(CREDS_FILE) as f:
+        with open(creds_file) as f:
             creds_data = json.load(f)
-            logger.info(f"Сервисный аккаунт: {creds_data['client_email']}")
-
-        credentials = Credentials.from_service_account_info(creds_data, scopes=[
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive.file"
-        ])
+        
+        credentials = Credentials.from_service_account_info(
+            creds_data,
+            scopes=[
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/drive.file"
+            ]
+        )
+        
         client = gspread.authorize(credentials)
+        sheet = client.open_by_key(sheet_id)
+        logger.info(f"Успешно подключено к таблице: {sheet.title}")
         
-        sheet = client.open_by_key(SHEET_ID)
-        logger.info(f"Таблица открыта: {sheet.title}")
-        
-        # Создаем листы если их нет
+        # Создаем необходимые листы, если их нет
         for sheet_name in ['GIM', 'TR']:
             try:
                 sheet.worksheet(sheet_name)
             except WorksheetNotFound:
                 sheet.add_worksheet(title=sheet_name, rows=100, cols=20)
-                logger.info(f"Создан лист: {sheet_name}")
+                logger.info(f"Создан новый лист: {sheet_name}")
         
         return sheet
         
     except Exception as e:
-        logger.error(f"Ошибка инициализации Google Sheets: {e}")
+        logger.error(f"Ошибка при работе с Google Sheets: {str(e)}")
         return None
 
-# ... [Ваши обработчики команд остаются без изменений] ...
+# ===== Основные обработчики бота =====
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Бот запущен! Используйте /help для списка команд.")
 
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    help_text = """
+    Доступные команды:
+    /start - Запустить бота
+    /help - Показать это сообщение
+    """
+    await update.message.reply_text(help_text)
+
+# ===== Запуск приложения =====
 async def main():
     if not check_environment():
         exit(1)
@@ -96,17 +105,20 @@ async def main():
     try:
         app = ApplicationBuilder().token(os.environ.get("BOT_TOKEN")).build()
         
-        # ... [Ваши обработчики команд] ...
+        # Регистрация обработчиков команд
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(CommandHandler("help", help_command))
         
-        WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+        # Настройка вебхука
+        webhook_url = os.environ.get("WEBHOOK_URL")
         await app.run_webhook(
             listen="0.0.0.0",
             port=int(os.environ.get("PORT", 10000)),
-            webhook_url=WEBHOOK_URL,
+            webhook_url=webhook_url,
             drop_pending_updates=True
         )
     except Exception as e:
-        logger.error(f"Ошибка запуска бота: {e}")
+        logger.error(f"Ошибка при запуске бота: {str(e)}")
         exit(1)
 
 if __name__ == "__main__":
