@@ -4,6 +4,7 @@ import gspread
 import logging
 import asyncio
 import nest_asyncio
+from aiohttp import web
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -12,16 +13,15 @@ from telegram.ext import (
 )
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import WorksheetNotFound
-from aiohttp import web
 
-# Настройка логгера
+# ===== Логгер =====
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Health-check endpoint
+# ===== Health Check =====
 async def handle_health_check(request):
     return web.Response(text="OK", status=200)
 
@@ -32,35 +32,21 @@ async def start_health_server(port):
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    logger.info(f"Health check сервер запущен на порту {port}")
+    logger.info(f"Health-check сервер запущен на порту {port}")
 
-# Проверка переменных окружения
+# ===== Проверка переменных окружения =====
 def check_environment():
-    required_vars = {
-        'BOT_TOKEN': os.environ.get("BOT_TOKEN"),
-        'SHEET_ID': os.environ.get("SHEET_ID"),
-        'CREDS_FILE': os.environ.get("CREDS_FILE"),
-        'WEBHOOK_URL': os.environ.get("WEBHOOK_URL"),
-        'PORT': os.environ.get("PORT", "10000")
-    }
-
-    logger.info("Проверка переменных окружения:")
-    for key, value in required_vars.items():
-        status = "✓" if value else "✗"
-        logger.info(f"{key}: {status}")
-
-    if not all(required_vars.values()):
-        missing = [k for k, v in required_vars.items() if not v]
-        logger.error(f"Отсутствуют переменные: {', '.join(missing)}")
+    required = ["BOT_TOKEN", "SHEET_ID", "CREDS_FILE", "WEBHOOK_URL", "PORT"]
+    for key in required:
+        if not os.environ.get(key):
+            logger.error(f"❌ Отсутствует переменная окружения: {key}")
+            return False
+    if not os.path.exists(os.environ["CREDS_FILE"]):
+        logger.error("❌ CREDS_FILE не найден")
         return False
-
-    if not os.path.exists(required_vars['CREDS_FILE']):
-        logger.error(f"Файл учетных данных не найден: {required_vars['CREDS_FILE']}")
-        return False
-
     return True
 
-# Подключение Google Sheets
+# ===== Подключение к Google Sheets =====
 def init_google_sheets():
     try:
         creds_file = os.environ.get("CREDS_FILE")
@@ -76,60 +62,52 @@ def init_google_sheets():
                 "https://www.googleapis.com/auth/drive.file"
             ]
         )
-
         client = gspread.authorize(credentials)
         sheet = client.open_by_key(sheet_id)
-        logger.info(f"Успешно подключено к таблице: {sheet.title}")
+        logger.info(f"Подключено к таблице: {sheet.title}")
 
-        for sheet_name in ['GIM', 'TR']:
+        for name in ["GIM", "TR"]:
             try:
-                sheet.worksheet(sheet_name)
+                sheet.worksheet(name)
             except WorksheetNotFound:
-                sheet.add_worksheet(title=sheet_name, rows=100, cols=20)
-                logger.info(f"Создан новый лист: {sheet_name}")
+                sheet.add_worksheet(title=name, rows=100, cols=20)
+                logger.info(f"Создан новый лист: {name}")
 
         return sheet
-
     except Exception as e:
-        logger.error(f"Ошибка при работе с Google Sheets: {str(e)}")
+        logger.error(f"Ошибка Google Sheets: {e}")
         return None
 
-# Обработчики команд
+# ===== Команды бота =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Бот запущен! Используйте /help для списка команд.")
+    await update.message.reply_text("✅ Бот активен. Используйте /help для списка команд.")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Команды:\n/start — запуск\n/help — помощь")
+    await update.message.reply_text("/start — запуск\n/help — помощь")
 
-# Главная асинхронная функция
+# ===== Главная асинхронная функция =====
 async def async_main():
     if not check_environment():
-        raise RuntimeError("Проверка окружения не пройдена")
-
+        return
     sheet = init_google_sheets()
     if not sheet:
-        raise RuntimeError("Не удалось инициализировать Google Sheets")
+        return
 
     port = int(os.environ.get("PORT", 10000))
     await start_health_server(port)
 
-    try:
-        application = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).build()
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("help", help_command))
+    application = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
 
-        await application.run_webhook(
-            listen="0.0.0.0",
-            port=port,
-            webhook_url=os.environ["WEBHOOK_URL"],
-            drop_pending_updates=True
-        )
+    await application.run_webhook(
+        listen="0.0.0.0",
+        port=port,
+        webhook_url=os.environ["WEBHOOK_URL"],
+        drop_pending_updates=True
+    )
 
-    except Exception as e:
-        logger.error(f"Ошибка при запуске бота: {str(e)}")
-        raise
-
-# Запуск
+# ===== Запуск =====
 if __name__ == "__main__":
     nest_asyncio.apply()
     asyncio.run(async_main())
