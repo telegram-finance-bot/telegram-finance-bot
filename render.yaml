@@ -12,7 +12,7 @@ services:
       - key: SHEET_ID
         value: 1n89yGxSXW1uBFmGBWuheXNmi4oPuhXqwnJQB3t7VQeo
       - key: BOT_TOKEN
-        value: 7712104265:AAF2999juz76TU9M1olpgsBQMgMJk115XeM
+        value: 7712104265:AAF2999juz76IU9MloLpgsBQWgMJklI5XeM
     secretFiles:
       - name: gspread_key.json
         mountPath: /etc/secrets
