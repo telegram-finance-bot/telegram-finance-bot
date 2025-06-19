@@ -2,7 +2,7 @@ import os
 import json
 import gspread
 import logging
-import threading
+import asyncio
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -24,11 +24,17 @@ logger = logging.getLogger(__name__)
 async def handle_health_check(request):
     return web.Response(text="OK", status=200)
 
-def run_health_server():
+async def start_health_server():
     app = web.Application()
     app.add_routes([web.get("/", handle_health_check)])
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+
     port = int(os.environ.get("PORT", "10000"))
-    web.run_app(app, port=port)
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logger.info(f"AIOHTTP health server запущен на порту {port}")
 
 # ===== Проверка переменных окружения =====
 def check_environment():
@@ -101,8 +107,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     await update.message.reply_text(help_text)
 
-# ===== Основная функция =====
-def main():
+# ===== Главная асинхронная функция =====
+async def main():
     if not check_environment():
         raise RuntimeError("Проверка окружения не пройдена")
 
@@ -110,26 +116,24 @@ def main():
     if not sheet:
         raise RuntimeError("Не удалось инициализировать Google Sheets")
 
-    # Запускаем aiohttp-сервер в отдельном потоке для health-check
-    threading.Thread(target=run_health_server, daemon=True).start()
+    # Запускаем aiohttp health-check сервер
+    await start_health_server()
 
     try:
         application = ApplicationBuilder().token(os.environ.get("BOT_TOKEN")).build()
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
 
-        application.run_webhook(
+        await application.run_webhook(
             listen="0.0.0.0",
             port=8443,
             webhook_url=os.environ.get("WEBHOOK_URL"),
             drop_pending_updates=True
         )
 
-        logger.info("Бот успешно запущен в режиме webhook")
-
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {str(e)}")
         raise
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
