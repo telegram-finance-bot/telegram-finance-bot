@@ -1,3 +1,7 @@
+logger.info("Проверка доступа:")
+logger.info(f"TOKEN: {'установлен' if TOKEN else 'НЕТ'}")
+logger.info(f"SHEET_ID: {SHEET_ID}")
+logger.info(f"CREDS_FILE: {'существует' if os.path.exists(CREDS_FILE) else 'НЕТ'}")
 import os
 import json
 import gspread
