@@ -1,3 +1,17 @@
+# В начале main() добавьте:
+logger.info("=== ПРОВЕРКА ПЕРЕМЕННЫХ ===")
+logger.info(f"TOKEN: {'установлен' if TOKEN else 'НЕТ'}")
+logger.info(f"SHEET_ID: {'установлен' if SHEET_ID else 'НЕТ'}")
+logger.info(f"CREDS_FILE: {'существует' if CREDS_FILE and os.path.exists(CREDS_FILE) else 'НЕТ'}")
+logger.info(f"WEBHOOK_URL: {'установлен' if WEBHOOK_URL else 'НЕТ'}")
+
+if not TOKEN:
+    logger.error("Токен бота не найден! Проверьте секрет 'telegram-bot-secret'")
+if not SHEET_ID:
+    logger.error("ID таблицы не найден! Проверьте секрет 'google-sheet-secret'")
+if not CREDS_FILE or not os.path.exists(CREDS_FILE):
+    logger.error(f"Файл учетных данных не найден по пути: {CREDS_FILE}")
+
 import os
 import json
 import gspread
