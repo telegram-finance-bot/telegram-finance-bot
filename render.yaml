@@ -3,17 +3,24 @@ services:
     name: telegram-finance-bot
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python main.py
+    startCommand: python app.py
     envVars:
-      - key: BOT_TOKEN
-        value: 7712104265:AAF2999juz76IU9MloLpgsBQWgMJklI5XeM
-      - key: SHEET_ID
-        value: 1n89yGxSXW1uBFmGBWuheXNmi4oPuhXqwnJQB3t7VQeo
       - key: WEBHOOK_URL
         value: https://telegram-finance-bot-0ify.onrender.com
       - key: CREDS_FILE
         value: /etc/secrets/gspread_key.json
+      - key: BOT_TOKEN
+        valueFrom: 7712104265:AAF2999juz76IU9MloLpgsBQWgMJklI5XeM
+          secretKeyRef:
+            name: telegram-bot-secret
+            key: BOT_TOKEN
+      - key: SHEET_ID
+        valueFrom: 1n89yGxSXW1uBFmGBWuheXNmi4oPuhXqwnJQB3t7VQeo
+          secretKeyRef:
+            name: google-sheet-secret
+            key: SHEET_ID
     plan: free
-    secretFiles:
-      - name: gspread_key.json
-        mountPath: /etc/secrets/gspread_key.json
+    secrets:
+      - name: gspread-service-account
+        fileName: gspread_key.json
+        mountPath: /etc/secrets
