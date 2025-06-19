@@ -123,5 +123,11 @@ async def main():
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(main())  # ✅ Но убери любые .run_webhook внутри main(), если не await'ишь всё правильно
 
+    try:
+        asyncio.run(main())
+    except RuntimeError:
+        # fallback для "event loop already running"
+        import nest_asyncio
+        nest_asyncio.apply()
+        asyncio.get_event_loop().run_until_complete(main())
