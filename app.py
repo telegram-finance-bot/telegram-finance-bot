@@ -1,28 +1,33 @@
 import os
 import json
 import gspread
-import asyncio
 import logging
 from datetime import datetime
 from telegram import Update
-from telegram.error import RetryAfter
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler,
-    ConversationHandler, ContextTypes, filters
+    ApplicationBuilder, CommandHandler,
+    ContextTypes
 )
 from google.oauth2.service_account import Credentials
-from gspread.exceptions import SpreadsheetNotFound, APIError, WorksheetNotFound
+from gspread.exceptions import WorksheetNotFound
+from flask import Flask, request
 
-# ===== Настройка логгера =====
+# ===== Логгер =====
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
+# ===== Flask app для webhook endpoint =====
+flask_app = Flask(__name__)
+
+@flask_app.route("/", methods=["GET"])
+def index():
+    return "Webhook is up!", 200
+
 # ===== Проверка окружения =====
 def check_environment():
-    """Проверка всех необходимых переменных"""
     required_vars = {
         'BOT_TOKEN': os.environ.get("BOT_TOKEN"),
         'SHEET_ID': os.environ.get("SHEET_ID"),
@@ -46,7 +51,7 @@ def check_environment():
     
     return True
 
-# ===== Работа с Google Sheets =====
+# ===== Google Sheets init =====
 def init_google_sheets():
     try:
         creds_file = os.environ.get("CREDS_FILE")
@@ -67,7 +72,6 @@ def init_google_sheets():
         sheet = client.open_by_key(sheet_id)
         logger.info(f"Успешно подключено к таблице: {sheet.title}")
         
-        # Создаем необходимые листы, если их нет
         for sheet_name in ['GIM', 'TR']:
             try:
                 sheet.worksheet(sheet_name)
@@ -81,19 +85,14 @@ def init_google_sheets():
         logger.error(f"Ошибка при работе с Google Sheets: {str(e)}")
         return None
 
-# ===== Основные обработчики бота =====
+# ===== Обработчики =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Бот запущен! Используйте /help для списка команд.")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = """
-    Доступные команды:
-    /start - Запустить бота
-    /help - Показать это сообщение
-    """
-    await update.message.reply_text(help_text)
+    await update.message.reply_text("/start — запустить бота\n/help — помощь")
 
-# ===== Запуск приложения =====
+# ===== Главная функция запуска =====
 def main():
     if not check_environment():
         exit(1)
@@ -103,25 +102,23 @@ def main():
         exit(1)
 
     try:
-        app = ApplicationBuilder().token(os.environ.get("BOT_TOKEN")).build()
+        application = ApplicationBuilder().token(os.environ.get("BOT_TOKEN")).build()
 
-        # Регистрация обработчиков команд
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("help", help_command))
 
-        # Настройка вебхука
         webhook_url = os.environ.get("WEBHOOK_URL")
 
-        app.run_webhook(
+        application.run_webhook(
             listen="0.0.0.0",
             port=int(os.environ.get("PORT", 10000)),
             webhook_url=webhook_url,
+            allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True
         )
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {str(e)}")
         exit(1)
-
 
 if __name__ == "__main__":
     main()
