@@ -10,7 +10,6 @@ from telegram.ext import (
 )
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import WorksheetNotFound
-from aiohttp import web
 
 # ===== Логгер =====
 logging.basicConfig(
@@ -19,11 +18,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ===== Health-check route for GET /
-async def health_check(request):
-    return web.Response(text="OK", status=200)
-
-# ===== Проверка переменных окружения =====
+# ===== Проверка окружения =====
 def check_environment():
     required_vars = {
         'BOT_TOKEN': os.environ.get("BOT_TOKEN"),
@@ -49,7 +44,7 @@ def check_environment():
 
     return True
 
-# ===== Подключение Google Sheets =====
+# ===== Подключение к Google Sheets =====
 def init_google_sheets():
     try:
         creds_file = os.environ.get("CREDS_FILE")
@@ -95,6 +90,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     await update.message.reply_text(help_text)
 
+# ===== Health Check Endpoint =====
+async def handle_health_check():
+    return web.Response(text="OK", status=200)
+
 # ===== Основная функция =====
 def main():
     if not check_environment():
@@ -107,13 +106,12 @@ def main():
     try:
         application = ApplicationBuilder().token(os.environ.get("BOT_TOKEN")).build()
 
+        # Добавляем health check endpoint
+        application.web_app.add_routes([web.get("/", handle_health_check)])
+
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
 
-        # Добавляем health-check endpoint
-        application.web_app.add_routes([web.get("/", health_check)])
-
-        # Запуск webhook-сервера
         application.run_webhook(
             listen="0.0.0.0",
             port=int(os.environ.get("PORT")),
