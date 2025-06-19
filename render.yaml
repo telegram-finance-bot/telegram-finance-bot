@@ -10,9 +10,9 @@ services:
       - key: CREDS_FILE
         value: /etc/secrets/gspread_key.json
       - key: SHEET_ID
-        value: your_google_sheet_id_here  # Замените на реальный ID таблицы
+        value: 1n89yGxSXM1uBFm6BWuheXNmi4oPuhXqwnJ0B3t7V0eq
       - key: BOT_TOKEN
-        value: your_telegram_bot_token_here  # Замените на реальный токен бота
+        value: 7712104265:AAF2999juz76TU9M1olpgsBQMgMJk115XeM
     secretFiles:
       - name: gspread_key.json
         mountPath: /etc/secrets
