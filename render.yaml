@@ -9,12 +9,11 @@ services:
         value: https://telegram-finance-bot-0ify.onrender.com
       - key: CREDS_FILE
         value: /etc/secrets/gspread_key.json
-    secrets:
-      - name: telegram-bot-secret
-        envVar: BOT_TOKEN
-      - name: google-sheet-secret
-        envVar: SHEET_ID
-    plan: free
+      - key: SHEET_ID
+        value: your_google_sheet_id_here  # Замените на реальный ID таблицы
+      - key: BOT_TOKEN
+        value: your_telegram_bot_token_here  # Замените на реальный токен бота
     secretFiles:
       - name: gspread_key.json
         mountPath: /etc/secrets
+    plan: free
