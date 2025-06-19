@@ -10,7 +10,7 @@ services:
       - key: CREDS_FILE
         value: /etc/secrets/gspread_key.json
       - key: SHEET_ID
-        value: 1n89yGxSXM1uBFm6BWuheXNmi4oPuhXqwnJ0B3t7V0eq
+        value: 1n89yGxSXW1uBFmGBWuheXNmi4oPuhXqwnJQB3t7VQeo
       - key: BOT_TOKEN
         value: 7712104265:AAF2999juz76TU9M1olpgsBQMgMJk115XeM
     secretFiles:
