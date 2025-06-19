@@ -20,29 +20,28 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ===== AIOHTTP health-check =====
+# ===== Health Check Handler =====
 async def handle_health_check(request):
     return web.Response(text="OK", status=200)
 
-async def start_health_server():
+async def start_health_server(port):
+    """Запускает сервер для health-check запросов"""
     app = web.Application()
     app.add_routes([web.get("/", handle_health_check)])
-
     runner = web.AppRunner(app)
     await runner.setup()
-
-    port = int(os.environ.get("PORT", "10000"))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    logger.info(f"AIOHTTP health server запущен на порту {port}")
+    logger.info(f"Health check сервер запущен на порту {port}")
 
-# ===== Проверка переменных окружения =====
+# ===== Проверка окружения =====
 def check_environment():
     required_vars = {
         'BOT_TOKEN': os.environ.get("BOT_TOKEN"),
         'SHEET_ID': os.environ.get("SHEET_ID"),
         'CREDS_FILE': os.environ.get("CREDS_FILE"),
-        'WEBHOOK_URL': os.environ.get("WEBHOOK_URL")
+        'WEBHOOK_URL': os.environ.get("WEBHOOK_URL"),
+        'PORT': os.environ.get("PORT", "10000")
     }
 
     logger.info("Проверка переменных окружения:")
@@ -108,7 +107,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(help_text)
 
 # ===== Главная асинхронная функция =====
-async def main():
+async def async_main():
     if not check_environment():
         raise RuntimeError("Проверка окружения не пройдена")
 
@@ -116,8 +115,10 @@ async def main():
     if not sheet:
         raise RuntimeError("Не удалось инициализировать Google Sheets")
 
-    # Запускаем aiohttp health-check сервер
-    await start_health_server()
+    port = int(os.environ.get("PORT", 10000))
+    
+    # Запускаем health check сервер в фоне
+    await start_health_server(port)
 
     try:
         application = ApplicationBuilder().token(os.environ.get("BOT_TOKEN")).build()
@@ -126,14 +127,16 @@ async def main():
 
         await application.run_webhook(
             listen="0.0.0.0",
-            port=8443,
+            port=port,
             webhook_url=os.environ.get("WEBHOOK_URL"),
             drop_pending_updates=True
         )
+
+        logger.info("Бот успешно запущен в режиме webhook")
 
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {str(e)}")
         raise
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(async_main())
