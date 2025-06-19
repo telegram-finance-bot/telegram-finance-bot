@@ -3,6 +3,7 @@ import json
 import gspread
 import logging
 import asyncio
+import nest_asyncio
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -13,19 +14,18 @@ from google.oauth2.service_account import Credentials
 from gspread.exceptions import WorksheetNotFound
 from aiohttp import web
 
-# ===== Логгер =====
+# Настройка логгера
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# ===== Health Check Handler =====
+# Health-check endpoint
 async def handle_health_check(request):
     return web.Response(text="OK", status=200)
 
 async def start_health_server(port):
-    """Запускает сервер для health-check запросов"""
     app = web.Application()
     app.add_routes([web.get("/", handle_health_check)])
     runner = web.AppRunner(app)
@@ -34,7 +34,7 @@ async def start_health_server(port):
     await site.start()
     logger.info(f"Health check сервер запущен на порту {port}")
 
-# ===== Проверка окружения =====
+# Проверка переменных окружения
 def check_environment():
     required_vars = {
         'BOT_TOKEN': os.environ.get("BOT_TOKEN"),
@@ -60,7 +60,7 @@ def check_environment():
 
     return True
 
-# ===== Подключение Google Sheets =====
+# Подключение Google Sheets
 def init_google_sheets():
     try:
         creds_file = os.environ.get("CREDS_FILE")
@@ -94,19 +94,14 @@ def init_google_sheets():
         logger.error(f"Ошибка при работе с Google Sheets: {str(e)}")
         return None
 
-# ===== Обработчики команд =====
+# Обработчики команд
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Бот запущен! Используйте /help для списка команд.")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = """
-    Доступные команды:
-    /start - Запустить бота
-    /help - Показать это сообщение
-    """
-    await update.message.reply_text(help_text)
+    await update.message.reply_text("Команды:\n/start — запуск\n/help — помощь")
 
-# ===== Главная асинхронная функция =====
+# Главная асинхронная функция
 async def async_main():
     if not check_environment():
         raise RuntimeError("Проверка окружения не пройдена")
@@ -116,27 +111,25 @@ async def async_main():
         raise RuntimeError("Не удалось инициализировать Google Sheets")
 
     port = int(os.environ.get("PORT", 10000))
-    
-    # Запускаем health check сервер в фоне
     await start_health_server(port)
 
     try:
-        application = ApplicationBuilder().token(os.environ.get("BOT_TOKEN")).build()
+        application = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).build()
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
 
         await application.run_webhook(
             listen="0.0.0.0",
             port=port,
-            webhook_url=os.environ.get("WEBHOOK_URL"),
+            webhook_url=os.environ["WEBHOOK_URL"],
             drop_pending_updates=True
         )
-
-        logger.info("Бот успешно запущен в режиме webhook")
 
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {str(e)}")
         raise
 
+# Запуск
 if __name__ == "__main__":
+    nest_asyncio.apply()
     asyncio.run(async_main())
