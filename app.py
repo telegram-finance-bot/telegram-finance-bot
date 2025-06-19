@@ -13,7 +13,7 @@ from telegram.ext import (
 from google.oauth2.service_account import Credentials
 from gspread.exceptions import WorksheetNotFound
 
-# Логгер
+# Логирование
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -36,14 +36,17 @@ def check_environment():
         return False
     return True
 
-# Google Sheets
+# Подключение Google Sheets
 def init_google_sheets():
     try:
         with open(os.environ["CREDS_FILE"]) as f:
             creds_data = json.load(f)
         credentials = Credentials.from_service_account_info(
             creds_data,
-            scopes=["https://www.googleapis.com/auth/spreadsheets"]
+            scopes=[
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/drive.file"
+            ]
         )
         client = gspread.authorize(credentials)
         sheet = client.open_by_key(os.environ["SHEET_ID"])
@@ -59,35 +62,38 @@ def init_google_sheets():
         logger.error(f"❌ Ошибка Google Sheets: {e}")
         return None
 
-# Команды
+# Команды бота
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Бот работает! ✅")
+    await update.message.reply_text("Привет! Бот работает ✅")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("/start — запуск\n/help — помощь")
 
-# Основной запуск
+# Основная функция
 async def async_main():
     if not check_environment():
         raise RuntimeError("❌ Переменные окружения не настроены")
 
     sheet = init_google_sheets()
     if not sheet:
-        raise RuntimeError("❌ Не удалось подключиться к Google Sheets")
+        raise RuntimeError("❌ Google Sheets не подключены")
 
-    app = web.Application()
-    app.add_routes([web.get("/", handle_health_check)])
-
-    application = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).web_app(app).build()
+    # Telegram bot
+    application = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).build()
     application.bot_data["sheet"] = sheet
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
 
+    # aiohttp для Render health-check
+    aio_app = web.Application()
+    aio_app.add_routes([web.get("/", handle_health_check)])
+
+    # Запуск бота через webhook
     await application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ["PORT"]),
         webhook_url=os.environ["WEBHOOK_URL"],
-        drop_pending_updates=True
+        web_app=aio_app
     )
 
 if __name__ == "__main__":
