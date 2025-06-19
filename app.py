@@ -122,4 +122,6 @@ async def main():
         exit(1)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import asyncio
+    asyncio.run(main())  # ✅ Но убери любые .run_webhook внутри main(), если не await'ишь всё правильно
+
