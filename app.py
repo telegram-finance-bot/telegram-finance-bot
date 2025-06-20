@@ -62,7 +62,7 @@ def init_google_sheets():
         logger.error(f"❌ Ошибка Google Sheets: {e}")
         return None
 
-# Команды бота
+# Команды
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Привет! Бот работает ✅")
 
@@ -72,29 +72,27 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Основная функция
 async def async_main():
     if not check_environment():
-        raise RuntimeError("❌ Переменные окружения не настроены")
+        raise RuntimeError("❌ Ошибка в переменных окружения")
 
     sheet = init_google_sheets()
     if not sheet:
-        raise RuntimeError("❌ Google Sheets не подключены")
+        raise RuntimeError("❌ Не удалось подключиться к Google Sheets")
 
-    # Telegram bot
+    app = web.Application()
+    app.add_routes([web.get("/", handle_health_check)])
+
     application = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).build()
     application.bot_data["sheet"] = sheet
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
 
-    # aiohttp для Render health-check
-    aio_app = web.Application()
-    aio_app.add_routes([web.get("/", handle_health_check)])
-
-    # Запуск бота через webhook
     await application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ["PORT"]),
         webhook_url=os.environ["WEBHOOK_URL"],
-        web_app=aio_app
+        web_app=app
     )
 
+# Запуск
 if __name__ == "__main__":
     asyncio.run(async_main())
