@@ -14,14 +14,22 @@ services:
           secretKeyRef:
             name: telegram-secrets
             key: WEBHOOK_URL
-    
+      - key: BOT_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: telegram-secrets
+            key: BOT_TOKEN
+      - key: SHEET_ID
+        valueFrom:
+          secretKeyRef:
+            name: telegram-secrets
+            key: SHEET_ID
+      - key: CREDS_FILE
+        value: /etc/secrets/gspread_key.json
+
     secretFiles:
       - name: telegram-secrets
         mountPath: /etc/secrets
         files:
           - name: gspread_key.json
             path: gspread_key.json
-          - name: BOT_TOKEN
-            path: BOT_TOKEN
-          - name: SHEET_ID
-            path: SHEET_ID
