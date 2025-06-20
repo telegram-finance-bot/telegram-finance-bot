@@ -5,31 +5,37 @@ services:
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python app.py
-    
+
+    # Переменные окружения
     envVars:
       - key: PORT
-        value: '10000'
+        value: "10000"  # Должен совпадать с портом в коде
+        
       - key: WEBHOOK_URL
         valueFrom:
           secretKeyRef:
             name: telegram-secrets
-            key: WEBHOOK_URL
+            key: WEBHOOK_URL  # Без слеша в конце (пример: https://your-app.onrender.com)
+            
       - key: BOT_TOKEN
         valueFrom:
           secretKeyRef:
             name: telegram-secrets
-            key: BOT_TOKEN
+            key: BOT_TOKEN  # Токен от @BotFather
+            
       - key: SHEET_ID
         valueFrom:
           secretKeyRef:
             name: telegram-secrets
-            key: SHEET_ID
+            key: SHEET_ID  # ID Google Sheets документа
+            
       - key: CREDS_FILE
-        value: /etc/secrets/gspread_key.json
+        value: /etc/secrets/gspread_key.json  # Путь к файлу учетных данных
 
+    # Секретные файлы
     secretFiles:
       - name: telegram-secrets
-        mountPath: /etc/secrets
+        mountPath: /etc/secrets  # Куда монтируются файлы
         files:
-          - name: gspread_key.json
-            path: gspread_key.json
+          - name: gspread_key.json  # Файл учетных данных Google
+            path: gspread_key.json  # Содержимое файла из Secrets
