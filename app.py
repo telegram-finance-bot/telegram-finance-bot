@@ -2,177 +2,184 @@ import os
 import json
 import gspread
 import logging
+from aiohttp import web
 from telegram import Update
 from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    ConversationHandler,
-    ContextTypes,
-    filters
+    ApplicationBuilder, CommandHandler, MessageHandler, ConversationHandler,
+    ContextTypes, filters
 )
 from google.oauth2.service_account import Credentials
-from gspread.exceptions import WorksheetNotFound
+from gspread.exceptions import WorksheetNotFound, APIError
 from datetime import datetime
 
-# === Настройка логгера ===
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
+# === Логирование ===
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # === Константы ===
 TR_TYPE, WORK_DATA, OUT_DATA = range(3)
-REQUIRED_ENV_VARS = ['BOT_TOKEN', 'SHEET_ID', 'CREDS_FILE', 'WEBHOOK_URL', 'PORT']
 
 # === Инициализация Google Sheets ===
 def init_google_sheets():
     try:
         with open(os.environ["CREDS_FILE"]) as f:
             creds_data = json.load(f)
-
         credentials = Credentials.from_service_account_info(
             creds_data,
             scopes=["https://www.googleapis.com/auth/spreadsheets"]
         )
-        
         client = gspread.authorize(credentials)
         sheet = client.open_by_key(os.environ["SHEET_ID"])
-        
-        # Создаем листы если их нет
-        for sheet_name in ['GIM', 'TR']:
+
+        for name in ["GIM", "TR"]:
             try:
-                sheet.worksheet(sheet_name)
+                sheet.worksheet(name)
             except WorksheetNotFound:
-                sheet.add_worksheet(title=sheet_name, rows=100, cols=20)
-                logger.info(f"Создан новый лист: {sheet_name}")
-        
+                sheet.add_worksheet(title=name, rows=100, cols=20)
+                logger.info(f"Создан новый лист: {name}")
         return sheet
+    except KeyError as e:
+        logger.error(f"Ошибка: Переменная окружения {e} не найдена")
+        raise
+    except FileNotFoundError:
+        logger.error(f"Файл учетных данных {os.environ.get('CREDS_FILE')} не найден")
+        raise
     except Exception as e:
-        logger.error(f"Ошибка Google Sheets: {e}")
-        return None
+        logger.error(f"Ошибка при инициализации Google Sheets: {e}")
+        raise
 
-# === Обработчики команд ===
+# === Telegram Handlers ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Добро пожаловать! Выберите режим:\n"
-        "/gim - Режим GIM\n"
-        "/tr - Режим TR"
-    )
+    await update.message.reply_text("Привет! Выберите режим:\n/gim\n/tr")
 
-async def gim_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sheet = init_google_sheets()
-    if not sheet:
-        await update.message.reply_text("❌ Ошибка подключения к Google Sheets")
-        return
-    
+async def gim(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        worksheet = sheet.worksheet('GIM')
-        data = [datetime.now().isoformat(), update.message.from_user.full_name, "GIM запись"]
-        worksheet.append_row(data)
-        await update.message.reply_text("✅ Данные записаны в лист GIM")
+        sheet = init_google_sheets().worksheet("GIM")
+        sheet.append_row([datetime.now().isoformat(), update.effective_user.full_name])
+        await update.message.reply_text("✅ GIM-запись добавлена.")
+    except APIError as e:
+        logger.error(f"Ошибка Google Sheets: {e}")
+        await update.message.reply_text("❌ Ошибка при записи в Google Sheets.")
     except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка: {e}")
+        logger.error(f"Неизвестная ошибка: {e}")
+        await update.message.reply_text("❌ Произошла неизвестная ошибка.")
 
-async def tr_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Выбран режим TR. Выберите тип:\n"
-        "/work - Работа\n"
-        "/out - Выход\n"
-        "/cancel - Отмена"
-    )
+async def tr(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Выберите: /work или /out")
     return TR_TYPE
 
 async def tr_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Введите данные для WORK через запятую:\n"
-        "Формат: Дата, Имя, Проект, Часы"
-    )
+    await update.message.reply_text("Введите WORK: Дата, Имя, Проект, Часы")
     return WORK_DATA
 
 async def tr_out(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Введите данные для OUT через запятую:\n"
-        "Формат: Дата, Имя, Причина"
-    )
+    await update.message.reply_text("Введите OUT: Дата, Имя, Причина")
     return OUT_DATA
 
-async def process_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sheet = init_google_sheets()
-    if not sheet:
-        await update.message.reply_text("❌ Ошибка подключения к Google Sheets")
-        return ConversationHandler.END
-    
+async def save_work(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        data = ['WORK'] + [item.strip() for item in update.message.text.split(',')]
-        sheet.worksheet('TR').append_row(data)
-        await update.message.reply_text("✅ Данные WORK успешно записаны")
+        data = ["WORK"] + [x.strip() for x in update.message.text.split(",")]
+        if len(data) != 5:  # Проверка на количество полей
+            await update.message.reply_text("❌ Неверный формат. Ожидается: Дата, Имя, Проект, Часы")
+            return WORK_DATA
+        sheet = init_google_sheets().worksheet("TR")
+        sheet.append_row(data)
+        await update.message.reply_text("✅ WORK добавлен")
+        return ConversationHandler.END
+    except APIError as e:
+        logger.error(f"Ошибка Google Sheets: {e}")
+        await update.message.reply_text("❌ Ошибка при записи в Google Sheets.")
+        return WORK_DATA
     except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка: {e}")
-    
-    return ConversationHandler.END
+        logger.error(f"Неизвестная ошибка: {e}")
+        await update.message.reply_text("❌ Произошла неизвестная ошибка.")
+        return WORK_DATA
 
-async def process_out(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sheet = init_google_sheets()
-    if not sheet:
-        await update.message.reply_text("❌ Ошибка подключения к Google Sheets")
-        return ConversationHandler.END
-    
+async def save_out(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        data = ['OUT'] + [item.strip() for item in update.message.text.split(',')]
-        sheet.worksheet('TR').append_row(data)
-        await update.message.reply_text("✅ Данные OUT успешно записаны")
+        data = ["OUT"] + [x.strip() for x in update.message.text.split(",")]
+        if len(data) != 4:  # Проверка на количество полей
+            await update.message.reply_text("❌ Неверный формат. Ожидается: Дата, Имя, Причина")
+            return OUT_DATA
+        sheet = init_google_sheets().worksheet("TR")
+        sheet.append_row(data)
+        await update.message.reply_text("✅ OUT добавлен")
+        return ConversationHandler.END
+    except APIError as e:
+        logger.error(f"Ошибка Google Sheets: {e}")
+        await update.message.reply_text("❌ Ошибка при записи в Google Sheets.")
+        return OUT_DATA
     except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка: {e}")
-    
-    return ConversationHandler.END
+        logger.error(f"Неизвестная ошибка: {e}")
+        await update.message.reply_text("❌ Произошла неизвестная ошибка.")
+        return OUT_DATA
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Операция отменена")
+    await update.message.reply_text("Операция отменена.")
     return ConversationHandler.END
 
-# === Главная функция ===
-def main():
-    # Проверка переменных окружения
-    for var in REQUIRED_ENV_VARS:
-        if not os.environ.get(var):
-            logger.error(f"❌ Отсутствует переменная окружения: {var}")
-            return
-    
-    if not os.path.exists(os.environ["CREDS_FILE"]):
-        logger.error(f"❌ Файл учетных данных не найден: {os.environ['CREDS_FILE']}")
-        return
-    
-    # Настройка обработчиков
-    application = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).build()
-    
-    # Обработчик для режима TR
-    tr_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('tr', tr_mode)],
-        states={
-            TR_TYPE: [
-                CommandHandler('work', tr_work),
-                CommandHandler('out', tr_out),
-                CommandHandler('cancel', cancel)
-            ],
-            WORK_DATA: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_work)],
-            OUT_DATA: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_out)]
-        },
-        fallbacks=[CommandHandler('cancel', cancel)]
-    )
-    
-    application.add_handler(CommandHandler('start', start))
-    application.add_handler(CommandHandler('gim', gim_mode))
-    application.add_handler(tr_conv_handler)
-    
-    # Запуск вебхука (со встроенным health check в PTB 20.x+)
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ["PORT"]),
-        webhook_url=os.environ["WEBHOOK_URL"],
-        drop_pending_updates=True
-    )
+# === Health check ===
+async def health_check(request):
+    return web.Response(text="OK", status=200)
+
+# === Webhook handler ===
+async def handle_webhook(request):
+    try:
+        app = request.app["telegram_app"]
+        update = Update.de_json(await request.json(), app.bot)
+        await app.process_update(update)
+        return web.Response(status=200)
+    except Exception as e:
+        logger.error(f"Ошибка обработки вебхука: {e}")
+        return web.Response(status=500)
+
+# === Main ===
+async def main():
+    try:
+        # Telegram bot
+        app = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).build()
+
+        # Handlers
+        conv_handler = ConversationHandler(
+            entry_points=[CommandHandler("tr", tr)],
+            states={
+                TR_TYPE: [
+                    CommandHandler("work", tr_work),
+                    CommandHandler("out", tr_out)
+                ],
+                WORK_DATA: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_work)],
+                OUT_DATA: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_out)]
+            },
+            fallbacks=[CommandHandler("cancel", cancel)]
+        )
+
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(CommandHandler("gim", gim))
+        app.add_handler(conv_handler)
+
+        # aiohttp app
+        aio_app = web.Application()
+        aio_app["telegram_app"] = app  # Сохраняем Telegram app для использования в вебхуке
+        aio_app.add_routes([
+            web.get("/", health_check),
+            web.post("/webhook", handle_webhook)
+        ])
+
+        # Webhook
+        await app.initialize()
+        await app.start()
+        await app.updater.start_webhook(
+            listen="0.0.0.0",
+            port=int(os.environ.get("PORT", 10000)),
+            webhook_url=os.environ["WEBHOOK_URL"] + "/webhook",
+            web_app=aio_app,
+        )
+        logger.info("✅ Webhook активен")
+        await app.updater.wait_until_closed()
+    except Exception as e:
+        logger.error(f"Ошибка в main: {e}")
+        raise
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
