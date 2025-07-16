@@ -133,13 +133,13 @@ async def handle_webhook(request):
         logger.error(f"Ошибка обработки вебхука: {e}")
         return web.Response(status=500)
 
-# === Main ===
+# === Главная функция ===
 async def main():
     try:
-        # Telegram bot
+        # Telegram-бот
         app = ApplicationBuilder().token(os.environ["BOT_TOKEN"]).build()
 
-        # Handlers
+        # Обработчики
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler("tr", tr)],
             states={
@@ -157,25 +157,37 @@ async def main():
         app.add_handler(CommandHandler("gim", gim))
         app.add_handler(conv_handler)
 
-        # aiohttp app
+        # Приложение aiohttp
         aio_app = web.Application()
-        aio_app["telegram_app"] = app  # Сохраняем Telegram app для использования в вебхуке
+        aio_app["telegram_app"] = app  # Сохраняем Telegram-бот для использования в вебхуке
         aio_app.add_routes([
             web.get("/", health_check),
             web.post("/webhook", handle_webhook)
         ])
 
-        # Webhook
+        # Установка URL вебхука
+        webhook_url = os.environ["WEBHOOK_URL"] + "/webhook"
+        await app.bot.set_webhook(url=webhook_url)
+
+        # Запуск сервера aiohttp
+        runner = web.AppRunner(aio_app)
+        await runner.setup()
+        port = int(os.environ.get("PORT", 10000))
+        site = web.TCPSite(runner, "0.0.0.0", port)
+        await site.start()
+        logger.info(f"✅ Сервер aiohttp запущен на порту {port}")
+
+        # Запуск Telegram-бота (используем polling для простоты)
         await app.initialize()
         await app.start()
-        await app.updater.start_webhook(
-            listen="0.0.0.0",
-            port=int(os.environ.get("PORT", 10000)),
-            webhook_url=os.environ["WEBHOOK_URL"] + "/webhook",
-            web_app=aio_app,
-        )
-        logger.info("✅ Webhook активен")
+        logger.info("✅ Telegram-бот запущен")
+        await app.updater.start_polling()  # Используем polling для простоты
         await app.updater.wait_until_closed()
+
+        # Поддержание работы цикла событий
+        while True:
+            await asyncio.sleep(3600)  # Держим приложение активным
+
     except Exception as e:
         logger.error(f"Ошибка в main: {e}")
         raise
