@@ -165,7 +165,7 @@ async def main():
             web.post("/webhook", handle_webhook)
         ])
 
-        # Установка URL вебхука
+        # Установка URL вебхука (опционально, если используете вебхук)
         webhook_url = os.environ["WEBHOOK_URL"] + "/webhook"
         await app.bot.set_webhook(url=webhook_url)
 
@@ -181,7 +181,7 @@ async def main():
         await app.initialize()
         await app.start()
         logger.info("✅ Telegram-бот запущен")
-        await app.run_polling()  # Используем run_polling вместо start_polling и wait_until_closed
+        await app.run_polling()  # Современный способ запуска с polling
 
     except Exception as e:
         logger.error(f"Ошибка в main: {e}")
