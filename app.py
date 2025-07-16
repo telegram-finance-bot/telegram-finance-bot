@@ -177,16 +177,11 @@ async def main():
         await site.start()
         logger.info(f"✅ Сервер aiohttp запущен на порту {port}")
 
-        # Запуск Telegram-бота (используем polling для простоты)
+        # Запуск Telegram-бота с polling
         await app.initialize()
         await app.start()
         logger.info("✅ Telegram-бот запущен")
-        await app.updater.start_polling()  # Используем polling для простоты
-        await app.updater.wait_until_closed()
-
-        # Поддержание работы цикла событий
-        while True:
-            await asyncio.sleep(3600)  # Держим приложение активным
+        await app.run_polling()  # Используем run_polling вместо start_polling и wait_until_closed
 
     except Exception as e:
         logger.error(f"Ошибка в main: {e}")
